@@ -27,7 +27,17 @@ const QA_ROOT = path.resolve(__dirname, '..');
 const TARGET_ROOT = process.env.REPO_ROOT
   ? path.resolve(process.env.REPO_ROOT)
   : path.resolve(QA_ROOT, '..');
-const CONTRACT_PATH = path.join(QA_ROOT, 'template-contract.json');
+// When a target is active (QA_TARGET=dev|release), reconcile against that target's
+// own recipe; otherwise the single default. Falls back if a per-target file is absent.
+function resolveContractPath() {
+  const target = process.env.QA_TARGET;
+  if (target) {
+    const perTarget = path.join(QA_ROOT, `template-contract.${target}.json`);
+    if (fs.existsSync(perTarget)) return perTarget;
+  }
+  return path.join(QA_ROOT, 'template-contract.json');
+}
+const CONTRACT_PATH = resolveContractPath();
 const CHECK_MODE = process.argv.includes('--check');
 
 // Tiny ANSI helpers (skipped when output isn't a TTY).

@@ -23,7 +23,23 @@ import {
 import { TARGET_ROOT, TEMPLATE_PRESENT } from './target';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const CONTRACT_PATH = path.join(HERE, '..', 'template-contract.json');
+
+/**
+ * Which recipe to read. When a target is active (QA_TARGET=dev|release, set by
+ * run-target.cjs), each version is judged against ITS OWN contract
+ * (template-contract.<target>.json). Falls back to the single default
+ * template-contract.json for a plain local run, and again if a per-target file is
+ * absent — so nothing breaks for someone running inside a repo without a target.
+ */
+export function contractPathFor(target: string | undefined = process.env.QA_TARGET): string {
+  if (target) {
+    const perTarget = path.join(HERE, '..', `template-contract.${target}.json`);
+    if (fs.existsSync(perTarget)) return perTarget;
+  }
+  return path.join(HERE, '..', 'template-contract.json');
+}
+
+const CONTRACT_PATH = contractPathFor();
 
 export interface TemplateContract {
   stages: string[];

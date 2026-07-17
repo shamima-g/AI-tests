@@ -1,0 +1,15 @@
+{
+  "_comment": "The channel list. Each named template maps to the repo it lives in and the recipe (contract) it is judged against. Adding a template later = one entry here. `run-target.cjs` reads this to 'tune in' to a target at a ref; `compare-targets.cjs` reads it to line two targets up. URLs confirmed by `git ls-remote` on 2026-07-17.",
+  "targets": {
+    "dev": {
+      "repo": "https://github.com/stadium-software/stadium-8",
+      "contract": "template-contract.dev.json",
+      "description": "The in-development template."
+    },
+    "release": {
+      "repo": "https://github.com/Digiata/Stadium-Builder",
+      "contract": "template-contract.release.json",
+      "description": "The published/release template."
+    }
+  }
+}

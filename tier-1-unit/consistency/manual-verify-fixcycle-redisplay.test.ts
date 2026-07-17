@@ -16,7 +16,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { REPO_ROOT, createTempProject } from '../../helpers';
+import { REPO_ROOT, createTempProject, describeTemplate } from '../../helpers';
 import type { TempProject } from '../../helpers/temp-project';
 
 const CONTINUE = path.join(REPO_ROOT, '.claude', 'commands', 'continue.md');
@@ -34,7 +34,7 @@ function carriesTicksForward(continueMd: string): boolean {
   );
 }
 
-describe('manual-test approval — fix-cycle re-display', () => {
+describeTemplate('manual-test approval — fix-cycle re-display', () => {
   it('PASS: continue.md re-displays the approval carrying previously-passed ticks forward', () => {
     expect(carriesTicksForward(fs.readFileSync(CONTINUE, 'utf8'))).toBe(true);
   });

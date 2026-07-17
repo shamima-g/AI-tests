@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { REPO_ROOT } from '../../helpers';
+import { REPO_ROOT, describeTemplate } from '../../helpers';
 
 const CLAUDE_DIR = path.join(REPO_ROOT, '.claude');
 const SHARED_DIR = path.join(CLAUDE_DIR, 'shared');
@@ -53,7 +53,7 @@ function extractSharedPolicyRefs(text: string): { dir: string; file: string }[] 
   return out;
 }
 
-describe('shared/ + policies/ — no orphans', () => {
+describeTemplate('shared/ + policies/ — no orphans', () => {
   const referencers = collectReferencers();
   const targets = [
     ...listTargets(SHARED_DIR).map((f) => ({ dir: 'shared', file: f, abs: path.join(SHARED_DIR, f) })),
@@ -72,7 +72,7 @@ describe('shared/ + policies/ — no orphans', () => {
   }
 });
 
-describe('shared/ + policies/ — every reference resolves', () => {
+describeTemplate('shared/ + policies/ — every reference resolves', () => {
   it('PASS: no reference points at a missing shared/policy file', () => {
     const broken: string[] = [];
     for (const r of collectReferencers()) {

@@ -1,0 +1,7 @@
+{
+  "_comment": "Fixture channel list for the channel-resolution tests — kept separate from the real targets.json so tests don't depend on live URLs.",
+  "targets": {
+    "dev": { "repo": "https://example.test/dev.git", "contract": "template-contract.dev.json" },
+    "release": { "repo": "https://example.test/release.git", "contract": "template-contract.release.json" }
+  }
+}

@@ -18,7 +18,9 @@
     "compare": "node scripts/compare-reports.cjs",
     "project-report": "node scripts/generate-test-report.cjs --no-open && node scripts/compare-reports.cjs",
     "reconcile": "node scripts/reconcile-template.cjs",
-    "reconcile:check": "node scripts/reconcile-template.cjs --check"
+    "reconcile:check": "node scripts/reconcile-template.cjs --check",
+    "test:target": "node scripts/run-target.cjs",
+    "compare:targets": "node scripts/compare-targets.cjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

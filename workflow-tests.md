@@ -100,6 +100,121 @@ against a different one. They currently expect:
 > If a whole batch of tests starts failing after a template update, suspect a
 > **version mismatch** against this list before assuming the template is broken.
 
+> **This pinning is now generalised.** The single-version pinning above is the
+> *default target*. The suite can be aimed at any template at any version, and each
+> version is judged against **its own** recipe — see
+> [Testing any template, any version](#testing-any-template-any-version-and-comparing-before-release)
+> below. So a "version mismatch" is no longer a wall of red: the drift banner names
+> the gap and version-gated checks skip what didn't exist yet.
+
+---
+
+## Testing any template, any version (and comparing before release)
+
+Everything above pins the suite to **one** template version. This section
+generalises that: the same tests can be aimed at **any** template, at **any**
+version, and can **compare two versions** to answer *"is dev safe to promote to
+release?"* — without editing a single test. It leans entirely on the one path the
+suite already resolves through (`REPO_ROOT`, via the `target` helper); the new
+machinery is a thin front layer, and it is held to every rule above (a good **and**
+a broken case, its own throwaway folder, self-cleanup, never touches the real
+project).
+
+**The template carries its own version.** Every template records where it stands in
+a `template-version.json` at its root (e.g. `{ "templateRef": "v1.1.0" }`) and
+documents how it got there in a root `CHANGELOG.md` ([Keep a
+Changelog](https://keepachangelog.com/en/1.1.0/) format: `## [1.1.0] - 2026-07-14`
+headers with `### Added` / `### Changed` / `### Removed` / `### Fixed` entries). The
+suite reads both — the marker to know *which* version it is testing, the changelog
+to explain *why* two versions differ.
+
+### Two more promises the suite tests
+
+| # | The thing | The promise |
+|---|-----------|-------------|
+| H | **Any template, any version** | QA names a template (`dev` / `release` / …) and a version, and the suite tests exactly that — downloading it, aiming itself at it, judging it against *that version's own* recipe, and filing the result under its name and version. No test edits. |
+| I | **Safe-to-promote comparison** | Lining dev up against release shows exactly what differs. A difference a changelog entry explains is flagged **pending-promotion** (amber — it does not fail the run); a difference with **no** changelog entry behind it is **unexplained drift** and fails (red). |
+
+### The new machinery (and the real files it leans on)
+
+| Piece | What it is | Leans on |
+|-------|-----------|----------|
+| `targets.json` | The channel list — each named template → its repo URL and its contract file. One line to add a template. | — |
+| `run-target.cjs` | The "tune in" step — clones a named target at a ref into a throwaway checkout, points `REPO_ROOT` at it, runs the suite, files results under `<target>-<ref>`. | `target` helper, `template-version.json` |
+| `template-contract.{dev,release}.json` | Two recipes, one per template, so each version is judged against its own shape — never against the other's. | `reconcile-template.cjs` |
+| `VERSION` | The suite's own baseline — the template version these tests were written for. | — |
+| `helpers/changelog.ts` | Parses a template's `CHANGELOG.md` and returns the entries between two versions. | `CHANGELOG.md` |
+| `compare-targets.cjs` | The comparison step — diffs two checkouts' live values and attributes each difference to a changelog entry (explained → amber) or to none (unexplained → red). | `changelog.ts`, `reconcile-template.cjs` |
+
+### New test areas
+
+| # | Area | What it covers | Tier |
+|---|------|----------------|------|
+| N | **Channel resolution** | `targets.json` + the resolver in `run-target.cjs` — a named target maps to its URL and contract | 1 |
+| O | **Per-version contract** | contract selection by active target; each version green against its **own** recipe | 1 |
+| P | **Version marker & gap** | `template-version.json` read; suite `VERSION` vs template ref; the drift banner | 1 |
+| Q | **Changelog & attribution** | `changelog.ts` parsing + entries-between + explained-vs-unexplained classification | 1 |
+| R | **Dev-vs-release comparison** | `compare-targets.cjs` — green / amber (explained) / red (unexplained) | 1 → 2 |
+| S | **Version-gated tests** | a check declares "applies from vX.Y" and skips as Not-Applicable on older versions | 1 |
+| T | **Grade by own rules** | the suite reads the version's *live* values, never today's hardcoded ones (essential for the live Tier-3 grade) | 1 → 3 |
+| U | **Labelled results** | results filed under `<target>-<ref>` so two versions sit side by side | 1 → 2 |
+
+> **Where the live download sits.** The *logic* above (parsing, resolving,
+> attributing, gap maths, label routing) is Tier 1 — pure, fast, fed fixtures (a
+> sample `targets.json`, a sample `CHANGELOG.md`, two synthetic template trees),
+> offline, each with a good and a broken case. The *actual clone* of a real ref is
+> network-bound and slow, so it is proven once as a recorded checkout in Tier 2 and
+> end-to-end by a person in Tier 3 — the same split the rest of the suite already
+> uses.
+
+### Every check has a "good" case and a "broken" case (rule 1)
+
+| Check | "Good" case (passes) | "Broken" case (must go red) |
+|-------|----------------------|------------------------------|
+| Channel resolves | `dev` / `release` → their repo URL + contract | An unknown target name → clear error, **not** a silent default |
+| Checkout aims the suite | After `run-target dev v1.1.0`, the template resolves at the throwaway checkout and is present | A bad ref → fails loudly, **never** falls back to a stale prior checkout |
+| Right recipe chosen | Testing `dev` loads `…dev.json`; `release` loads `…release.json` | A declared target with a missing contract file → fails visibly, not silently using the other's |
+| Per-version contract | Release live values match the release contract → green | A stage in release's live values but absent from its contract → red |
+| Version marker read | Valid `template-version.json` → its `templateRef` parsed | Missing / malformed marker → falls back or reports "unknown", **never** crashes |
+| Gap banner | Suite baseline == template ref → "in sync" | Template older than the baseline → the gap is **shown**, not swallowed |
+| Changelog parses | Real `CHANGELOG.md` → ordered versions with typed entries | A malformed heading → skipped and flagged; the parser does **not** throw |
+| Entries-between | Between `1.0.0` and `1.1.0` → the `1.1.0` entries | A reversed or equal range → empty, not an error |
+| Difference attributed | A diff matching a changelog entry → **explained** (amber) | A diff with no entry → **unexplained** (red), surfaced not hidden |
+| Comparison verdict | Two identical templates → green; differ only by logged work → amber, run **not** failed | Differ with an unexplained diff → red |
+| Version gate | A check marked "from v1.1.0" runs on v1.1.0, **skips** on v1.0.0 | The same gated check *fails* instead of skipping on the older version |
+| Grade by own rules | Point at v1.0.0 → reads v1.0.0's rules and grades against them | An old version graded against today's hardcoded rules → fake failure (the thing we prevent) |
+| Labelled results | A run for `dev v1.1.0` writes to `…/dev-v1.1.0/` | Two versions' results colliding in one undifferentiated folder → flagged |
+
+### Handling the version gap honestly (the four layers)
+
+When the suite is newer than the template it is testing, a check for something that
+did not exist yet must **never** read as a bug. Four layers keep the gap visible and
+out of the failure count:
+
+- **A — Show the gap.** Every run prints and saves three facts: the version the
+  suite was written for (`VERSION`), the version under test (`template-version.json`
+  → `templateRef`), and the gap between them — and, using the changelog, *what*
+  changed across that gap. A gap is never a mystery.
+- **B — Gate each test by version.** A check declares the versions it applies to;
+  checks for later features **skip as Not-Applicable** on older versions, never fail.
+  Green = correct for this version · Skipped = not part of it yet · Red = a real
+  problem.
+- **C — Judge by the version's own rules.** Wherever it grades, the suite reads the
+  template's *live* values (its stages, statuses, doc names) from the version under
+  test — never today's hardcoded ones. **Essential for the live Tier-3 grade:** the
+  app is judged against the rules that shipped *with the version under test*.
+- **D — Match the suite to the version.** The cleanest option: the suite is
+  versioned too (its `VERSION` file, and its own git tags), so to test a
+  3-versions-old template you can run the suite *as it was then* — zero gap. Default
+  to **D** for a true like-for-like run; back it with A + B + C so a single suite can
+  still stretch across nearby versions honestly.
+
+> **Two versions, two homes (decided).** The **suite's** version lives in its
+> committed `VERSION` file (it declares *"I was written for vX.Y"*); the
+> **template's** version is its own `template-version.json` (`templateRef`), with the
+> git tag as a fallback. The drift banner (Layer A) prints the two side by side and
+> lists the changelog entries between them.
+
 ---
 
 ## The three tiers of tests
@@ -453,12 +568,30 @@ The suite on disk is partway there. Here is the honest state after the retired
 material was removed, so nobody mistakes a red test for a broken template when it's
 really a test that hasn't caught up.
 
-**Where it stands:** the full suite currently reports **252 passing, 0 failing,
-10 skipped** (the 10 skips are the 3 artifact-lint regression scans + the 7
-recorded-run invariants, all awaiting the output/fixture they scan). (The 3 skips are the artifact-lint regression
-scans, which skip visibly until real `web/src/` output exists to scan.) The tests
-that used to fail — dashboard and manual-verify — targeted machinery that *still
-exists but changed shape*, and have now been **ported** to the epic-branch model.
+**Where it stands:** aimed at the release template (v1.1.0), the suite reports
+**314 passing, 6 failing, 10 skipped**. The retired tests listed below have now
+been **deleted from disk** (not just described as removed), so a plain run is no
+longer buried in stale reds. The 10 skips are the artifact-lint regression scans +
+recorded-run invariants, awaiting the output/fixture they scan.
+
+**The 6 remaining failures are a real finding, not a broken test.** They live in
+`enforce-generated-doc-names.test.ts` and `validate-generated-doc-names.test.ts`:
+release v1.1.0's doc-name enforcement does **not** block drift-named files in
+epic-scoped directories — the exact bug this suite found and got fixed *after*
+v1.1.0 shipped. This is the flexibility tooling working as intended: catching a
+genuine version difference. The clean follow-up is to **version-gate** these two
+checks (Layer B — "applies from v\<fix\>") so they *skip* on versions that predate
+the fix and only go red if it regresses on a version that should have it.
+
+> **Standalone (rule 6) — fixed.** A plain run with **no** template now reports
+> **79 passing, 0 failing, 75 skipped** — no crashes. Previously 7 template-
+> dependent files (`doc-name-conventions`, the three `manual-verify-*`,
+> `shared-policies-references`, `epic-state` schema, `recorded-run`) crashed with
+> `ENOENT` because they read `.claude/` before the skip guard applied. The fix:
+> those suites now use `describeTemplate` so they skip cleanly, the `epic-state`
+> schema omits an `enum` when its source list is empty (an empty `enum: []` is an
+> invalid schema that threw at import), and the template-independent failure-path
+> checks were split out to plain `describe` so they still run standalone.
 
 ### Removed (retired — targets no longer exist in the template)
 
@@ -551,6 +684,32 @@ surviving script tests (`import-prototype`, `init-preferences`, `quality-gates`,
   The harness meta-checks always run; the invariants skip visibly until the fixture
   exists. Verified against a synthetic docs tree.
 
+### Added since (✅ — flexibility: any template, any version)
+
+The machinery from [Testing any template, any
+version](#testing-any-template-any-version-and-comparing-before-release) is now
+built and green (36 Tier-1 tests, each a good **and** a broken case):
+
+- **Channels + tune-in** — `targets.json` (dev → `stadium-software/stadium-8`,
+  release → `Digiata/Stadium-Builder`), `scripts/run-target.cjs` (clone a ref into
+  throwaway `.targets/`, print the Layer-A drift banner, aim `REPO_ROOT` +
+  `QA_TARGET`, file results under `<target>-<ref>/`).
+- **Per-version recipes** — `template-contract.{dev,release}.json`;
+  `helpers/template-contract.ts` and `reconcile-template.cjs` pick the active
+  target's contract (`QA_TARGET`), falling back to the default. Verified: release
+  contract reconciles clean against real v1.1.0 live values.
+- **Changelog attribution** — `helpers/changelog.cjs` (parse / entries-between /
+  attribution) + `scripts/compare-targets.cjs` giving the three-way
+  green/amber/red verdict. Verified end-to-end: identical → green, documented diff
+  → amber, undocumented diff → red (exit 1).
+- **Version marker + gap** — `VERSION` (suite baseline) vs `template-version.json`
+  (`templateRef`), via `helpers/template-version.cjs`.
+
+Remaining for this area: **confirm the dev recipe** by running `QA_TARGET=dev npm
+run reconcile` against a dev checkout (it currently starts equal to release);
+version-gating (Layer B) and grade-by-own-rules (Layer C) annotations are opt-in
+and added per test as needed.
+
 ### Remaining (⬜)
 
 - **Capture the golden run** itself (a one-time manual Team-Task-Manager run into
@@ -623,4 +782,12 @@ A one-line reason per area, so a reviewer can see why each earns its place.
 | Recorded-run — plan & stories | The plan stops covering the request, or a story loses its criteria |
 | Recorded-run — notebook / registry / double-check | The decision trail or the pre-merge double-check list goes missing |
 | Recorded-run — absence canaries | A retired feature (telemetry, code-reviewer, four phases) creeps back |
+| Channel resolution | A named template can't be aimed at, or an unknown name silently defaults to the wrong repo |
+| Per-version contract | A version is judged against the wrong recipe, so it fails just for being ahead or behind |
+| Version marker & gap | The version under test is unknown, or a suite-vs-template gap is hidden instead of shown |
+| Changelog & attribution | A real difference is mistaken for expected work, or expected work is mistaken for drift |
+| Dev-vs-release comparison | Unexplained drift slips into release, or documented work needlessly blocks a promotion |
+| Version-gated tests | A check for a not-yet-existing feature fails an old version instead of skipping |
+| Grade by own rules | An old version is graded against today's rules — a fake failure, worst of all for the live Tier-3 grade |
+| Labelled results | Two versions' results collide, so the side-by-side promote check can't be trusted |
 | Tier 3 — full walkthrough | Anything the automated tiers miss |

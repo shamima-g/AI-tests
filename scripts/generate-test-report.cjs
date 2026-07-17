@@ -43,7 +43,10 @@ const { spawnSync } = require('child_process');
 const QA_ROOT = path.resolve(__dirname, '..');
 const REPO_ROOT = path.resolve(QA_ROOT, '..');
 const WEB_ROOT = path.join(REPO_ROOT, 'web');
-const OUT_DIR = path.join(QA_ROOT, 'TestResults');
+// Results dir. A --label nests results under TestResults/<label>/ so runs for
+// different templates/versions (e.g. dev-v1.1.0, release-v1.1.0) sit side by side
+// instead of colliding. Reassigned from args in main().
+let OUT_DIR = path.join(QA_ROOT, 'TestResults');
 
 // Code-file extensions we count as "lines of code".
 const CODE_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.css', '.scss']);
@@ -56,11 +59,15 @@ function parseArgs(argv) {
   const o = {
     results: null, out: null, telemetryRoot: null, open: true,
     withWeb: false, withE2e: false, withGates: false, exitCode: false,
+    label: null, target: null, ref: null,
   };
   for (let i = 0; i < a.length; i++) {
     if (a[i] === '--results') o.results = a[++i];
     else if (a[i] === '--out') o.out = a[++i];
     else if (a[i] === '--telemetry-root') o.telemetryRoot = a[++i];
+    else if (a[i] === '--label') o.label = a[++i];
+    else if (a[i] === '--target') o.target = a[++i];
+    else if (a[i] === '--ref') o.ref = a[++i];
     else if (a[i] === '--no-open') o.open = false;
     else if (a[i] === '--with-web') o.withWeb = true;
     else if (a[i] === '--with-e2e') o.withE2e = true;
@@ -662,6 +669,12 @@ function main() {
   const now = new Date();
   const version = pkgVersion();
 
+  // A --label files results under their own folder so versions sit side by side.
+  if (opts.label) {
+    const safe = String(opts.label).replace(/[^A-Za-z0-9._-]/g, '-');
+    OUT_DIR = path.join(QA_ROOT, 'TestResults', safe);
+  }
+
   const json = loadResults(opts);
   const model = buildModel(json);
   const env = environment();
@@ -697,6 +710,9 @@ function main() {
       runBy: env.runBy, machine: env.machine,
       tokens: tel && tel.available ? tel.tokens : null,
       costUsd: tel && tel.costUsd != null ? tel.costUsd : null,
+      // Which template/version this run was aimed at (set by run-target.cjs), so
+      // labelled histories stay honest about what was under test.
+      target: opts.target || null, ref: opts.ref || null, label: opts.label || null,
       report: path.basename(outFile),
     });
     indexFile = rebuildIndex(OUT_DIR);

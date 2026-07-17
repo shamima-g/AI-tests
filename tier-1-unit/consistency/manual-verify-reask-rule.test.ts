@@ -17,7 +17,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { REPO_ROOT, createTempProject } from '../../helpers';
+import { REPO_ROOT, createTempProject, describeTemplate } from '../../helpers';
 import type { TempProject } from '../../helpers/temp-project';
 
 const CONTINUE = path.join(REPO_ROOT, '.claude', 'commands', 'continue.md');
@@ -35,7 +35,7 @@ function handlesFreeTextIssue(continueMd: string): boolean {
   );
 }
 
-describe('manual-test approval — free-text issue handling', () => {
+describeTemplate('manual-test approval — free-text issue handling', () => {
   it('PASS: continue.md captures a free-text failure and classifies it before fixing', () => {
     expect(handlesFreeTextIssue(fs.readFileSync(CONTINUE, 'utf8'))).toBe(true);
   });
@@ -46,7 +46,7 @@ describe('manual-test approval — free-text issue handling', () => {
   });
 });
 
-describe('manual-test approval — content shown before the question', () => {
+describeTemplate('manual-test approval — content shown before the question', () => {
   it('PASS: approval-pattern.md requires the summary/content before calling AskUserQuestion', () => {
     const md = fs.readFileSync(APPROVAL, 'utf8');
     // "... as regular conversation text *before* calling `AskUserQuestion`."

@@ -39,6 +39,17 @@ export const VALID_TRANSITIONS: Record<string, string[]> = lib?.VALID_TRANSITION
 export const defaultEpicState: EpicStateLib['defaultEpicState'] =
   lib?.defaultEpicState ?? (() => ({}));
 
+/**
+ * A string constrained to `values` — or an UNCONSTRAINED string when the list is
+ * empty (a standalone run with no template). An empty `enum: []` is an invalid
+ * JSON Schema that makes `ajv.compile` throw at import, before `describeTemplate`
+ * can skip the suite; omitting `enum` keeps the schema valid. The unconstrained
+ * form is never exercised — the tests that use this schema skip without a template.
+ */
+function stringEnum(values: string[]): Record<string, unknown> {
+  return values.length ? { type: 'string', enum: [...values] } : { type: 'string' };
+}
+
 /** Ajv-compatible JSON Schema for a per-epic state.json document. */
 export const epicStateSchema: Record<string, unknown> = {
   type: 'object',
@@ -60,16 +71,16 @@ export const epicStateSchema: Record<string, unknown> = {
         manualTestResults: { type: 'array' },
       },
     },
-    phase: { type: 'string', enum: [...EPIC_PHASES] },
+    phase: stringEnum(EPIC_PHASES),
     stories: {
       type: 'object',
       additionalProperties: {
         type: 'object',
         additionalProperties: true,
         properties: {
-          status: { type: 'string', enum: [...STORY_STATUS_VALUES] },
+          status: stringEnum(STORY_STATUS_VALUES),
           commit: { type: ['string', 'null'] },
-          e2eStatus: { type: 'string', enum: [...E2E_STATUS_VALUES] },
+          e2eStatus: stringEnum(E2E_STATUS_VALUES),
         },
       },
     },
@@ -81,7 +92,7 @@ export const epicStateSchema: Record<string, unknown> = {
           additionalProperties: true,
           // `stage`, when present, must be one of the known halt stages; halt objects
           // without a stage (e.g. a plain { reason }) are still valid.
-          properties: { stage: { type: 'string', enum: [...HALT_STAGES] } },
+          properties: { stage: stringEnum(HALT_STAGES) },
         },
       ],
     },

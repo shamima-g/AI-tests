@@ -17,7 +17,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { REPO_ROOT, createTempProject } from '../../helpers';
+import { REPO_ROOT, createTempProject, describeTemplate } from '../../helpers';
 import type { TempProject } from '../../helpers/temp-project';
 
 const CONTINUE = path.join(REPO_ROOT, '.claude', 'commands', 'continue.md');
@@ -28,7 +28,7 @@ function persistsResults(continueMd: string): boolean {
   return /manualTestResults/.test(continueMd) && /manual-tests\.html/.test(continueMd);
 }
 
-describe('manual-test approval — check-off page is generated', () => {
+describeTemplate('manual-test approval — check-off page is generated', () => {
   it('PASS: continue.md § B7.1 generates the manual-tests.html check-off page', () => {
     const md = fs.readFileSync(CONTINUE, 'utf8');
     expect(md).toMatch(/manual-tests\.html/);
@@ -43,26 +43,28 @@ describe('manual-test approval — check-off page is generated', () => {
   });
 });
 
-describe('manual-test approval — results are persisted', () => {
+describeTemplate('manual-test approval — results are persisted', () => {
   it('PASS: continue.md persists the handed-back results to state.json.epic.manualTestResults', () => {
     expect(persistsResults(fs.readFileSync(CONTINUE, 'utf8'))).toBe(true);
   });
+});
 
-  describe('failure-path coverage', () => {
-    let project: TempProject;
-    beforeEach(() => { project = createTempProject(); });
-    afterEach(() => { project.cleanup(); });
+// Independent of the template (writes its own temp continue.md), so it runs even
+// in a standalone checkout — a plain describe, not describeTemplate.
+describe('manual-test approval — results are persisted — failure-path coverage', () => {
+  let project: TempProject;
+  beforeEach(() => { project = createTempProject(); });
+  afterEach(() => { project.cleanup(); });
 
-    it('FAIL: a tampered continue.md that never persists results is detected', () => {
-      project.write(
-        '.claude/commands/continue.md',
-        '# /continue\n\nStep B7.1: show the checklist and ask the user. Done.\n',
-      );
-      const tampered = fs.readFileSync(
-        path.join(project.root, '.claude', 'commands', 'continue.md'),
-        'utf8',
-      );
-      expect(persistsResults(tampered)).toBe(false);
-    });
+  it('FAIL: a tampered continue.md that never persists results is detected', () => {
+    project.write(
+      '.claude/commands/continue.md',
+      '# /continue\n\nStep B7.1: show the checklist and ask the user. Done.\n',
+    );
+    const tampered = fs.readFileSync(
+      path.join(project.root, '.claude', 'commands', 'continue.md'),
+      'utf8',
+    );
+    expect(persistsResults(tampered)).toBe(false);
   });
 });

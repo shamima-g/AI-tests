@@ -12,10 +12,10 @@
  *   - both consuming scripts actually read the conventions file (so a rename is caught).
  */
 
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { REPO_ROOT } from '../../helpers';
+import { REPO_ROOT, describeTemplate as describe } from '../../helpers';
 
 const CONVENTIONS = path.join(REPO_ROOT, '.claude', 'shared', 'generated-doc-conventions.json');
 const NAMING_MD = path.join(REPO_ROOT, '.claude', 'shared', 'naming-conventions.md');
