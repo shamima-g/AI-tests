@@ -84,13 +84,43 @@ little rebuilding.
 
 ---
 
-## Two decisions needed before building
+## Decisions made
 
-1. **When dev and release look different, should the tests go RED (fail), or just quietly
-   note the difference in the report?**
-   *(Fail = louder, forces attention. Note = calmer, you read it yourself.)*
+### 1. When dev and release differ → RED **and** written into the report
 
-2. **Should there be one "expected recipe" (release's) and let dev show up as "different"?
-   Or keep two separate recipes, one for each?**
-   *(One recipe = less to maintain and you get the dev-vs-release difference for free.
-   Two recipes = cleaner but more upkeep.)*
+When the suite finds that dev and release differ, the run **fails (goes red)** *and* the
+exact difference is **written into the report**. Loud and documented — no silent drift.
+
+### 2. Two recipes — one per version (Option B)
+
+There are **two** expected recipes, kept separately:
+
+- `template-contract.dev.json` — the correct shape for the **dev** template.
+- `template-contract.release.json` — the correct shape for the **release** template.
+
+Each version is judged against **its own** recipe:
+
+- Test **release** against the release recipe → ✅ green when release is correct.
+- Test **dev** against the dev recipe → ✅ green when dev is correct.
+
+So neither version "fails" just for being ahead or behind the other. Green means that
+version genuinely matches what it's supposed to be.
+
+**Upkeep:** when dev changes, its recipe (`template-contract.dev.json`) is updated to
+match; same for release. Two files to keep current.
+
+### How the two decisions fit together
+
+Because each version has its own recipe (decision 2), the normal per-version tests stay
+green as long as each version is internally correct. The "go red when dev and release
+differ" from decision 1 is therefore a **separate dev-vs-release comparison step**:
+
+1. **Per-version checks** — is dev correct against the dev recipe? Is release correct
+   against the release recipe? (Each green on its own.)
+2. **Comparison step** — line the two versions up against each other. If they differ, the
+   run goes **red** and the report lists exactly what dev has that release doesn't (and
+   vice versa). This is your *"what still needs to be promoted from dev into release"*
+   checklist.
+
+So: two clean green per-version runs, plus one comparison that goes loud when the two
+drift apart.
