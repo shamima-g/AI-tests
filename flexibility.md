@@ -202,11 +202,21 @@ meaning of "any version, any time": you move *both* pieces back together.
 checks that didn't exist yet (B), and grading by that version's own rules (C) — so the gap
 is always visible and never counted as a bug.
 
-### One thing to decide
+### Where the version numbers live (decided)
 
-For Layers A/B/C to work, the suite needs to **read a version number** from somewhere. Pick
-where it lives:
+There are two versions to track, so they live in two places:
 
-- a `VERSION` file inside the template, or
-- the git tag the template was checked out at, or
-- a field in one of the template's own JSON files.
+1. **The test suite's own version → a `VERSION` file inside QATests.**
+   This is the suite declaring *"I am written for version X"* (its baseline). It's owned by
+   and committed with the suite. When the tests are adapted to a newer template, this file
+   is bumped and committed — so git records exactly when the suite moved. This is what
+   Layer A compares against to show the gap.
+
+2. **The template's version → the git tag it was checked out at.**
+   The version *being tested* is simply the tag/ref the template repo was cloned/checked
+   out at (e.g. `v8.2`). No extra file needed inside the template — the tag is the truth.
+   This is what Layers B and C read to decide which checks apply and which rules to grade
+   against.
+
+So: **suite version = the `VERSION` file it carries; template version = the git tag under
+test.** The drift banner (Layer A) simply prints the two side by side.
