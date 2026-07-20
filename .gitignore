@@ -6,5 +6,10 @@ coverage/
 .targets/
 # Transient per-run caches next to the reports (regenerated on every run)
 TestResults/.last-*.json
+# Tier 3 live-run artifacts: bulky raw AI streams, app-snapshot zips, and ephemeral
+# session state. The human-readable reports/history/charts are kept; these are not.
+TestResults/**/tier3-live/
+TestResults/**/*.zip
+TestResults/**/setup.log
 # Tarball fixtures are generated from real runs — ignore unless explicitly committed
 fixtures/checkpoints/*.tar

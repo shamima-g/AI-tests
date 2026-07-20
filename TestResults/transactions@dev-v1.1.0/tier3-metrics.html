@@ -1,0 +1,39 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Tier 3 — transactions@dev-v1.1.0</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem auto; max-width: 60rem; padding: 0 1rem; line-height: 1.5; }
+  h1 { margin-bottom: .25rem; } h2 { margin-top: 2rem; border-bottom: 1px solid #8884; padding-bottom: .25rem; }
+  table { border-collapse: collapse; width: 100%; margin: .5rem 0; font-size: .92rem; }
+  th, td { border: 1px solid #8883; padding: .35rem .5rem; text-align: left; }
+  th { background: #8881; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .bar { display: inline-block; height: .8rem; border-radius: 2px; }
+  .bar-active { background: #4a90d9; } .bar-claude { background: #7bc043; }
+  .muted { color: #8889; } .pass { color: #2e8b57; } .fail { color: #c0392b; }
+  .chartrow { display:flex; align-items:center; gap:.5rem; margin:.15rem 0; }
+  .chartrow .lbl { width: 9rem; font-size:.82rem; }
+  caption { text-align:left; color:#8889; font-size:.82rem; margin-bottom:.25rem; }
+</style>
+</head><body>
+<h1>Tier 3 — transactions@dev-v1.1.0</h1>
+<p class="muted">1 run(s) recorded. Newest first.</p>
+<h2>Last 10 runs per model</h2>
+<h3>opus</h3>
+<table><tr><th>When</th><th>Result</th><th>Active</th><th>Claude</th><th>Peak RAM</th><th>Tokens</th><th>Pass-rate</th><th>Rules missed</th></tr>
+<tr><td>20260720-0804</td><td class="pass">pass</td><td class="num">121m 41s</td><td class="num">1m 58s</td><td class="num">8.5 GB</td><td class="num">1,498,474</td><td class="num">0%</td><td>role-per-story</td></tr>
+</table>
+<h2>Time taken — overall (active) vs Claude's own</h2>
+<div><caption>Blue = active time · Green = Claude's own time</caption>
+<div class="chartrow"><span class="lbl">opus 20260720-0804</span><span class="bar bar-active" style="width:100%"></span><span class="muted">121m 41s</span></div>
+<div class="chartrow"><span class="lbl"></span><span class="bar bar-claude" style="width:2%"></span><span class="muted">1m 58s</span></div>
+</div>
+<h2>Most-flagged rules (what to make clearer)</h2>
+<table><tr><th>Rule</th><th>Times flagged</th></tr>
+<tr><td>role-per-story</td><td class="num">1</td></tr>
+</table>
+<h2>By version</h2>
+<table><tr><th>Version</th><th>Runs</th><th>Avg active</th><th>Avg Claude</th></tr>
+<tr><td>v1.1.0</td><td class="num">1</td><td class="num">121m 41s</td><td class="num">1m 58s</td></tr>
+</table>
+</body></html>
