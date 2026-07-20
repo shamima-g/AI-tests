@@ -140,3 +140,22 @@ Describe 'Run estimate (basis for the MACRO estimate)' {
         Remove-Item (Split-Path $h) -Recurse -Force
     }
 }
+
+Describe 'Epic estimates (per-epic build-time basis)' {
+    It 'PASS: averages per-epic seconds across matching runs, keyed by slug' {
+        $h = New-HistoryPath
+        Add-Tier3HistoryLine -HistoryPath $h -Record @{ timestamp = 'r1'; model = 'opus'; benchmark = 'transactions'; result = 'pass'; epics = @(@{ slug = 'auth'; stories = 6; seconds = 1000 }) }
+        Add-Tier3HistoryLine -HistoryPath $h -Record @{ timestamp = 'r2'; model = 'opus'; benchmark = 'transactions'; result = 'pass'; epics = @(@{ slug = 'auth'; stories = 6; seconds = 2000 }) }
+        $est = Get-Tier3EpicEstimates -HistoryPath $h -Model 'opus' -Benchmark 'transactions'
+        $est['auth'].seconds | Should -Be 1500
+        $est['auth'].samples | Should -Be 2
+        Remove-Item (Split-Path $h) -Recurse -Force
+    }
+
+    It 'FAIL-guard: rows without an epics field are skipped (first run shows none)' {
+        $h = New-HistoryPath
+        Add-Tier3HistoryLine -HistoryPath $h -Record @{ timestamp = 'old'; model = 'opus'; benchmark = 'transactions'; result = 'pass' }
+        (Get-Tier3EpicEstimates -HistoryPath $h -Model 'opus' -Benchmark 'transactions').Keys.Count | Should -Be 0
+        Remove-Item (Split-Path $h) -Recurse -Force
+    }
+}

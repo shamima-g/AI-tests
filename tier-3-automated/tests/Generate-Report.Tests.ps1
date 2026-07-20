@@ -135,6 +135,41 @@ Describe 'Macro estimate — estimated whole-run time (The run table)' {
     }
 }
 
+Describe 'Epics — counts + per-epic build time' {
+    It 'PASS: shows epics/stories created and a per-epic table with actual time' {
+        $out = New-OutDir
+        $run = Base-Run
+        $run.epicsCreated = 2; $run.storiesCreated = 8
+        $run.epics = @(
+            @{ slug = 'auth-and-app-shell'; stories = 6; seconds = 1980 },
+            @{ slug = 'transactions-review'; stories = 2; seconds = 600 }
+        )
+        $path = New-Tier3Report -Run $run -OutDir $out
+        $md = Get-Content $path -Raw
+        $md | Should -Match 'Epics created'
+        $md | Should -Match 'Stories created'
+        $md | Should -Match 'time to build each one'
+        $md | Should -Match 'auth-and-app-shell'
+        $md | Should -Match '33m 0s'                 # 1980s actual for the auth epic
+        Remove-Item $out -Recurse -Force
+    }
+
+    It 'PASS: with history, each epic shows an estimate and a difference' {
+        $out = New-OutDir
+        $hist = Join-Path $out 'tier3-history.jsonl'
+        Add-Tier3HistoryLine -HistoryPath $hist -Record @{
+            timestamp = 'past'; model = 'opus'; benchmark = 'transactions'; result = 'pass'
+            epics = @(@{ slug = 'auth-and-app-shell'; stories = 6; seconds = 1800 })
+        }
+        $run = Base-Run
+        $run.epicsCreated = 1; $run.storiesCreated = 6
+        $run.epics = @(@{ slug = 'auth-and-app-shell'; stories = 6; seconds = 1980 })
+        $path = New-Tier3Report -Run $run -OutDir $out -HistoryPath $hist
+        (Get-Content $path -Raw) | Should -Match '\+3m 0s'    # 1980 actual - 1800 estimate = +180s
+        Remove-Item $out -Recurse -Force
+    }
+}
+
 Describe 'Memory (minimum RAM) section' {
     It 'PASS: reports peak memory and the 16 GB verdict when memory is present' {
         $out = New-OutDir

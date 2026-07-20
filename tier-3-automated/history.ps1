@@ -124,3 +124,34 @@ function Get-Tier3RunEstimate {
         samples       = $rows.Count
     }
 }
+
+# Average per-epic build seconds across past runs (same model + benchmark), keyed by epic
+# slug — the basis for the report's per-epic "estimated" column. Empty when no comparable
+# history has an epics breakdown yet (so the first run shows no per-epic estimate).
+function Get-Tier3EpicEstimates {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$HistoryPath,
+        [Parameter(Mandatory)][string]$Model,
+        [Parameter(Mandatory)][string]$Benchmark
+    )
+    $rows = @(Get-Tier3History -HistoryPath $HistoryPath -Model $Model -Benchmark $Benchmark)
+    $bySlug = @{}   # slug -> list of seconds
+    foreach ($row in $rows) {
+        if (-not ($row.PSObject.Properties.Name -contains 'epics') -or $null -eq $row.epics) { continue }
+        foreach ($e in $row.epics) {
+            $slug = $e.slug
+            if (-not $slug) { continue }
+            if (-not $bySlug.ContainsKey($slug)) { $bySlug[$slug] = [System.Collections.Generic.List[double]]::new() }
+            $bySlug[$slug].Add([double]$e.seconds)
+        }
+    }
+    $est = @{}
+    foreach ($slug in $bySlug.Keys) {
+        $est[$slug] = @{
+            seconds = [Math]::Round((($bySlug[$slug]) | Measure-Object -Average).Average, 2)
+            samples = $bySlug[$slug].Count
+        }
+    }
+    return $est
+}

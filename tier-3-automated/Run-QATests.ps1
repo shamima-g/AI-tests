@@ -76,6 +76,9 @@ function New-HistoryRecordFromRun {
         benchmark = $Run.benchmark; result = $Run.result
     }
     if ($Run.ContainsKey('templateTarget') -and $Run.templateTarget) { $rec.templateTarget = $Run.templateTarget }
+    if ($Run.ContainsKey('epicsCreated'))   { $rec.epicsCreated   = $Run.epicsCreated }
+    if ($Run.ContainsKey('storiesCreated')) { $rec.storiesCreated = $Run.storiesCreated }
+    if ($Run.ContainsKey('epics') -and $Run.epics) { $rec.epics = $Run.epics }
     if ($Run.ContainsKey('timing') -and $Run.timing) {
         $rec.activeSeconds   = $Run.timing.activeSeconds
         $rec.claudeSeconds   = $Run.timing.claudeSeconds

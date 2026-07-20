@@ -107,6 +107,55 @@ Describe 'Event parsing — Read-ClaudeEvent updates state and fires OnTurn' {
     }
 }
 
+Describe 'Epic stats — commit-epic parse, per-epic time, story counts' {
+    It 'PASS: Get-Tier3CommitEpic reads the epic slug from a conventional-commit scope' {
+        Get-Tier3CommitEpic -Subject 'feat(auth-and-app-shell/story-3): sign-in' | Should -Be 'auth-and-app-shell'
+        Get-Tier3CommitEpic -Subject 'docs(auth-and-app-shell): start epic'      | Should -Be 'auth-and-app-shell'
+        Get-Tier3CommitEpic -Subject 'chore: initial template scaffold'          | Should -BeNullOrEmpty
+    }
+
+    It 'PASS: Measure-Tier3Epics = last-minus-first commit per epic, keeps story counts' {
+        $epics = @(@{ slug = 'auth'; stories = 2 }, @{ slug = 'review'; stories = 1 })
+        $commits = @(
+            @{ ts = 1000; subject = 'docs(auth): start epic' },
+            @{ ts = 1300; subject = 'feat(auth/story-1): a' },
+            @{ ts = 1900; subject = 'chore(auth): epic-end' },
+            @{ ts = 2000; subject = 'docs(review): start epic' },
+            @{ ts = 2500; subject = 'feat(review/story-1): b' }
+        )
+        $m = Measure-Tier3Epics -Epics $epics -Commits $commits
+        ($m | Where-Object { $_.slug -eq 'auth' }).seconds   | Should -Be 900   # 1900-1000
+        ($m | Where-Object { $_.slug -eq 'review' }).seconds | Should -Be 500   # 2500-2000
+        ($m | Where-Object { $_.slug -eq 'auth' }).stories   | Should -Be 2
+    }
+
+    It 'FAIL-guard: an epic with no matching commits gets 0 seconds, not an error' {
+        $m = @(Measure-Tier3Epics -Epics @(@{ slug = 'ghost'; stories = 0 }) -Commits @(@{ ts = 1; subject = 'chore: x' }))
+        $m.Count | Should -Be 1
+        ($m | Where-Object { $_.slug -eq 'ghost' }).seconds | Should -Be 0
+    }
+
+    It 'PASS: Get-Tier3EpicDirs counts story-*.md per epic folder' {
+        $root = Join-Path ([System.IO.Path]::GetTempPath()) ("tier3-epics-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path (Join-Path $root 'generated-docs/epics/alpha/stories') -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $root 'generated-docs/epics/beta/stories')  -Force | Out-Null
+        Set-Content -Path (Join-Path $root 'generated-docs/epics/alpha/stories/story-1.md') -Value 'x'
+        Set-Content -Path (Join-Path $root 'generated-docs/epics/alpha/stories/story-2.md') -Value 'x'
+        $dirs = Get-Tier3EpicDirs -Scaffold $root
+        @($dirs).Count | Should -Be 2
+        ($dirs | Where-Object { $_.slug -eq 'alpha' }).stories | Should -Be 2
+        ($dirs | Where-Object { $_.slug -eq 'beta' }).stories  | Should -Be 0
+        Remove-Item $root -Recurse -Force
+    }
+
+    It 'FAIL-guard: a scaffold with no epics folder yields zero epics, not an error' {
+        $root = Join-Path ([System.IO.Path]::GetTempPath()) ("tier3-noepics-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $root -Force | Out-Null
+        @(Get-Tier3EpicDirs -Scaffold $root).Count | Should -Be 0
+        Remove-Item $root -Recurse -Force
+    }
+}
+
 Describe 'Per-phase Claude-time distribution' {
     It 'PASS: the build phase gets the whole time; workflow-phases split by output tokens' {
         $spans = @(

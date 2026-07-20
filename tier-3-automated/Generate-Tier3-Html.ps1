@@ -168,6 +168,43 @@ function New-Tier3Html {
     }
     $H.Add('</div>')
 
+    # ---- epics — per-epic build time (latest run), actual vs average ----
+    $latest = $newest[0]   # newest-first
+    $latestEpics = Get-Prop $latest 'epics' @()
+    if ($null -ne $latestEpics -and @($latestEpics).Count -gt 0) {
+        # per-slug average build seconds across every recorded run (the estimate bar)
+        $slugSecs = @{}
+        foreach ($r in $rows) {
+            foreach ($e in @(Get-Prop $r 'epics' @())) {
+                $slug = Get-Prop $e 'slug'
+                if (-not $slug) { continue }
+                if (-not $slugSecs.ContainsKey($slug)) { $slugSecs[$slug] = [System.Collections.Generic.List[double]]::new() }
+                $slugSecs[$slug].Add([double](Get-Prop $e 'seconds' 0))
+            }
+        }
+        $ec = Get-Prop $latest 'epicsCreated' (@($latestEpics).Count)
+        $sc = Get-Prop $latest 'storiesCreated' 0
+        $H.Add('<h2>Epics — time to build each one (latest run)</h2>')
+        $H.Add("<p class=""muted"">Latest run created <strong>$ec</strong> epic(s) and <strong>$sc</strong> story(ies).</p>")
+        $maxE = 1.0
+        foreach ($e in @($latestEpics)) { $v = [double](Get-Prop $e 'seconds' 0); if ($v -gt $maxE) { $maxE = $v } }
+        foreach ($slug in $slugSecs.Keys) { $avg = [double]((($slugSecs[$slug]) | Measure-Object -Average).Average); if ($avg -gt $maxE) { $maxE = $avg } }
+        $H.Add('<div><caption>Blue = actual this run · Green = average across recorded runs · one epic per pair</caption>')
+        foreach ($e in @($latestEpics)) {
+            $slug = Get-Prop $e 'slug' '?'; $stories = Get-Prop $e 'stories' 0
+            $actual = [double](Get-Prop $e 'seconds' 0)
+            $aw = [Math]::Round(($actual / $maxE) * 100)
+            $lbl = ConvertTo-HtmlText "$slug ($stories st.)"
+            $H.Add("<div class=""chartrow""><span class=""lbl"">$lbl</span><span class=""bar bar-active"" style=""width:$aw%""></span><span class=""muted"">$(Format-Secs $actual)</span></div>")
+            if ($slugSecs.ContainsKey($slug)) {
+                $avg = [double]((($slugSecs[$slug]) | Measure-Object -Average).Average)
+                $ew = [Math]::Round(($avg / $maxE) * 100)
+                $H.Add("<div class=""chartrow""><span class=""lbl""></span><span class=""bar bar-claude"" style=""width:$ew%""></span><span class=""muted"">est $(Format-Secs $avg)</span></div>")
+            }
+        }
+        $H.Add('</div>')
+    }
+
     # ---- most-flagged rules ----
     $ruleTally = @{}
     foreach ($r in $rows) {

@@ -268,6 +268,10 @@ The report includes:
 - An **attempts table** — one row per build the AI tried: did it pass, did it compile,
   how many tokens, how many turns, and a short reason.
 - A **timing table with an estimate next to the actual time** (see below).
+- **Epic counts + per-epic build time**: how many epics and stories were created, and a
+  per-epic table of estimated vs actual build time (with a matching bar chart on the
+  charts page). Per-epic time comes from the app's git history (first→last commit for
+  that epic); the estimate is that epic's average over past runs.
 - A **per-test detail table**.
 - The **list of tools installed**, so the setup is on record.
 - A **failure explanation section**: for every failure, a plain reason and a

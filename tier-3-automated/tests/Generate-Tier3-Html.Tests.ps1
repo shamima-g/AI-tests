@@ -109,3 +109,31 @@ Describe 'Last-10-per-model + content' {
         Remove-Item $ws -Recurse -Force
     }
 }
+
+Describe 'Epics chart (latest run)' {
+    It 'PASS: renders a per-epic bar chart with counts when the latest run has epics' {
+        $ws = New-Workspace
+        $h = Join-Path $ws 'tier3-history.jsonl'
+        Add-Tier3HistoryLine -HistoryPath $h -Record @{
+            timestamp = '20260720-0800'; version = 'v1.1.0'; model = 'opus'; benchmark = 'transactions'; result = 'pass'
+            activeSeconds = 5000; claudeSeconds = 2500; epicsCreated = 2; storiesCreated = 8
+            epics = @(@{ slug = 'auth-and-app-shell'; stories = 6; seconds = 1980 }, @{ slug = 'transactions-review'; stories = 2; seconds = 600 })
+        }
+        $out = New-Tier3Html -HistoryPath $h -OutPath (Join-Path $ws 'tier3-metrics.html') -Benchmark 'transactions'
+        $html = Get-Content $out -Raw
+        $html | Should -Match 'time to build each one'
+        $html | Should -Match 'auth-and-app-shell'
+        $html | Should -Match '2</strong> epic'          # epicsCreated headline
+        $html | Should -Match 'bar-active'                # the actual-time bar
+        Remove-Item $ws -Recurse -Force
+    }
+
+    It 'FAIL-guard: no epics field on the latest run → no epics chart, no crash' {
+        $ws = New-Workspace
+        $h = Join-Path $ws 'tier3-history.jsonl'
+        Seed -HistoryPath $h -Model 'opus'
+        $out = New-Tier3Html -HistoryPath $h -OutPath (Join-Path $ws 'tier3-metrics.html') -Benchmark 'transactions'
+        (Get-Content $out -Raw) | Should -Not -Match 'time to build each one'
+        Remove-Item $ws -Recurse -Force
+    }
+}

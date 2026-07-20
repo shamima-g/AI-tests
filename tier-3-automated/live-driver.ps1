@@ -455,6 +455,70 @@ function Get-Tier3Conformance {
     }
 }
 
+# The epic slug from a conventional-commit subject: "type(scope): ..." -> the scope, then
+# the part before any '/' (so "feat(auth/story-3): x" -> "auth"). $null when there's no scope.
+function Get-Tier3CommitEpic {
+    param([string]$Subject)
+    if ($Subject -match '^\s*[a-zA-Z]+\(([^)]+)\)') { return (($Matches[1]) -split '/')[0] }
+    return $null
+}
+
+# Epic folders + story counts under the built app's generated-docs/epics. Returns an
+# ordered array of @{ slug; stories } (empty when the app has no epics yet).
+function Get-Tier3EpicDirs {
+    param([Parameter(Mandatory)][string]$Scaffold)
+    $epicsRoot = Join-Path $Scaffold 'generated-docs/epics'
+    if (-not (Test-Path $epicsRoot)) { return @() }
+    $out = [System.Collections.Generic.List[hashtable]]::new()
+    foreach ($d in (Get-ChildItem -Path $epicsRoot -Directory -ErrorAction SilentlyContinue | Sort-Object Name)) {
+        $stories = @(Get-ChildItem -Path (Join-Path $d.FullName 'stories') -Filter 'story-*.md' -File -ErrorAction SilentlyContinue).Count
+        $out.Add(@{ slug = $d.Name; stories = [int]$stories })
+    }
+    return @($out)
+}
+
+# Pure: combine epic dirs with commit records (@{ ts; subject }) into per-epic build time.
+# Per-epic seconds = last commit - first commit for that epic (0 when it has <2 commits).
+# Testable without git. Returns @({ slug; stories; seconds }) in the epics' given order.
+function Measure-Tier3Epics {
+    param([array]$Epics, [array]$Commits)
+    $span = @{}   # slug -> @{ min; max }
+    foreach ($c in @($Commits)) {
+        $slug = Get-Tier3CommitEpic -Subject ([string]$c.subject)
+        if (-not $slug) { continue }
+        $ts = [long]$c.ts
+        if (-not $span.ContainsKey($slug)) { $span[$slug] = @{ min = $ts; max = $ts } }
+        else {
+            if ($ts -lt $span[$slug].min) { $span[$slug].min = $ts }
+            if ($ts -gt $span[$slug].max) { $span[$slug].max = $ts }
+        }
+    }
+    $out = [System.Collections.Generic.List[hashtable]]::new()
+    foreach ($e in @($Epics)) {
+        $secs = if ($span.ContainsKey($e.slug)) { [double]($span[$e.slug].max - $span[$e.slug].min) } else { 0.0 }
+        $out.Add([ordered]@{ slug = [string]$e.slug; stories = [int]$e.stories; seconds = $secs })
+    }
+    return @($out)
+}
+
+# Gather epic/story counts + per-epic build time from the built app (filesystem + git log).
+# Best-effort: no git or no epics yields zeroes, never throws.
+function Get-Tier3EpicStats {
+    param([Parameter(Mandatory)][string]$Scaffold)
+    $epics = @(Get-Tier3EpicDirs -Scaffold $Scaffold)
+    $commits = @()
+    try {
+        foreach ($line in @(& git -C $Scaffold log --reverse --format='%ct|%s' 2>$null)) {
+            $parts = [string]$line -split '\|', 2
+            if ($parts.Count -eq 2) { $commits += @{ ts = [long]$parts[0]; subject = $parts[1] } }
+        }
+    }
+    catch { }
+    $perEpic = @(Measure-Tier3Epics -Epics $epics -Commits $commits)
+    $stories = 0; foreach ($e in $epics) { $stories += [int]$e.stories }
+    return @{ epicsCreated = @($epics).Count; storiesCreated = $stories; epics = $perEpic }
+}
+
 # Parse a vitest JSON report (a run of tier-1 + tier-2) into per-tier group summaries for the
 # report's "how each group did" table. Pure and testable.
 function ConvertFrom-VitestGroupsJson {
@@ -754,6 +818,9 @@ function Invoke-Tier3LiveRun {
     $conf = Get-Tier3Conformance -Scaffold $WorkingDir -QaRoot $qaRoot
     $lintMissed = if ($conf.ran) { @($conf.rulesMissed) } else { @() }
 
+    # Epics/stories created + per-epic build time (from the app's git history).
+    $epicStats = Get-Tier3EpicStats -Scaffold $WorkingDir
+
     # Fold build + lint into the verdict. Conforming = built AND no rules missed AND not timed out.
     $rulesMissed = @()
     if (-not $built.ok) { $rulesMissed += 'did-not-build' }
@@ -773,6 +840,9 @@ function Invoke-Tier3LiveRun {
             claudeSeconds = [Math]::Round($combined.claudeSeconds, 2); phases = $phaseTiming
         }
         memory = $memSummary
+        epicsCreated = $epicStats.epicsCreated
+        storiesCreated = $epicStats.storiesCreated
+        epics = $epicStats.epics
         tier3 = @{
             ran = $true; verdict = $verdict
             passRate = if ($conformed) { 1.0 } else { 0.0 }

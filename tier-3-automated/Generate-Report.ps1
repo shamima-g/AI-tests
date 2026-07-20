@@ -119,6 +119,12 @@ function New-Tier3Report {
         & $add "| Template | $($Run.templateTarget) |"
     }
     & $add "| Version tested | $($Run.version) |"
+    if ($Run.ContainsKey('epicsCreated') -and $null -ne $Run.epicsCreated) {
+        & $add "| Epics created | $($Run.epicsCreated) |"
+    }
+    if ($Run.ContainsKey('storiesCreated') -and $null -ne $Run.storiesCreated) {
+        & $add "| Stories created | $($Run.storiesCreated) |"
+    }
     & $add "| Run by | $($Run.runBy) on $($Run.machine) |"
     & $add "| When | $dateHuman |"
     if ($Run.ContainsKey('timing') -and $Run.timing) {
@@ -231,6 +237,35 @@ function New-Tier3Report {
                 $estText = '—'; $diffText = '—'
             }
             & $add ("| {0} | {1} | {2} | {3} | {4} |" -f $p.path, $estText, (Format-Duration $actual), $diffText, (Format-Duration ([double]$p.claudeSeconds)))
+        }
+        & $add ''
+    }
+
+    # ---- Epics — per-epic build time (estimate vs actual) ----
+    if ($Run.ContainsKey('epics') -and @($Run.epics).Count -gt 0) {
+        $epicEst = @{}
+        if ($HistoryPath) { $epicEst = Get-Tier3EpicEstimates -HistoryPath $HistoryPath -Model $Run.model -Benchmark $Run.benchmark }
+        $nEpics = if ($Run.ContainsKey('epicsCreated')) { $Run.epicsCreated } else { @($Run.epics).Count }
+        $nStories = if ($Run.ContainsKey('storiesCreated')) { $Run.storiesCreated } else { 0 }
+        $epicWord  = if ($nEpics -eq 1) { 'epic' } else { 'epics' }
+        $storyWord = if ($nStories -eq 1) { 'story' } else { 'stories' }
+        & $add '## Epics — time to build each one'
+        & $add ''
+        & $add "This run created **$nEpics** $epicWord and **$nStories** $storyWord in total. The estimate for each epic is its average build time on past runs of this app + model (a dash means no history yet)."
+        & $add ''
+        & $add '| Epic | Stories | Estimated | Actual | Difference |'
+        & $add '|---|--:|--:|--:|--:|'
+        foreach ($e in @($Run.epics)) {
+            $actual = [double]$e.seconds
+            if ($epicEst.ContainsKey($e.slug)) {
+                $est = [double]$epicEst[$e.slug].seconds
+                $diff = $actual - $est
+                $sign = if ($diff -ge 0) { '+' } else { '-' }
+                $estText = Format-Duration $est
+                $diffText = "$sign$(Format-Duration ([Math]::Abs($diff)))"
+            }
+            else { $estText = '—'; $diffText = '—' }
+            & $add ("| {0} | {1} | {2} | {3} | {4} |" -f ([string]$e.slug).Replace('|', '\|'), $e.stories, $estText, (Format-Duration $actual), $diffText)
         }
         & $add ''
     }
