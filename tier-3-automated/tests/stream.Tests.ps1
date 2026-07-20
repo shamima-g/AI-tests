@@ -55,6 +55,21 @@ Describe 'ConvertFrom-ClaudeStream — normalise the events' {
         $p = ConvertFrom-ClaudeStream -Path (Join-Path ([System.IO.Path]::GetTempPath()) 'no-such-stream.jsonl')
         @($p.turns).Count | Should -Be 0
     }
+
+    It 'PASS: MANY result events SUM their duration + turns (not last-write-wins)' {
+        $dir = Join-Path ([System.IO.Path]::GetTempPath()) ("tier3-stream-multi-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        $path = Join-Path $dir 'stream.jsonl'
+        Set-Content -Path $path -Encoding utf8 -Value @(
+            '{"type":"assistant","message":{"usage":{"input_tokens":10,"output_tokens":5},"content":[]}}',
+            '{"type":"result","subtype":"success","duration_ms":100000,"num_turns":2,"usage":{"output_tokens":50}}',
+            '{"type":"result","subtype":"success","duration_ms":120000,"num_turns":3,"usage":{"output_tokens":60}}'
+        )
+        $p = ConvertFrom-ClaudeStream -Path $path
+        $p.claudeSeconds | Should -Be 220        # 100000+120000 ms, summed (not just 120000)
+        $p.numTurns      | Should -Be 5          # 2+3, summed
+        Remove-Item $dir -Recurse -Force
+    }
 }
 
 Describe 'Invoke-TimerFromStream — drive the stopwatch' {

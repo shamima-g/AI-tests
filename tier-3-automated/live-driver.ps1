@@ -218,6 +218,25 @@ function Invoke-ClaudeHeadless {
     }
 }
 
+# Total tokens (input + output + cache) from a result event, tolerant of format:
+# the `usage` object, or a per-model `modelUsage` map (varies across CLI versions).
+function Get-ClaudeUsageTokens {
+    param($Event)
+    $fields = @('input_tokens', 'output_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens')
+    $u = Get-JsonProp $Event 'usage'
+    if ($u) {
+        $sum = 0; foreach ($k in $fields) { $sum += [int](Get-JsonProp $u $k 0) }
+        return $sum
+    }
+    $mu = Get-JsonProp $Event 'modelUsage'
+    if ($mu) {
+        $sum = 0
+        foreach ($p in $mu.PSObject.Properties) { foreach ($k in $fields) { $sum += [int](Get-JsonProp $p.Value $k 0) } }
+        return $sum
+    }
+    return 0
+}
+
 # Ingest one stream-json line, updating $State and firing $OnTurn on assistant turns.
 function Read-ClaudeEvent {
     param([string]$Line, [hashtable]$State, [scriptblock]$OnTurn)
@@ -252,17 +271,18 @@ function Read-ClaudeEvent {
             if ($OnTurn) { & $OnTurn $State.turns $gate $outTok }
         }
         'result' {
+            # A Tier 3 run emits MANY result events — one per Claude sub-invocation, each
+            # carrying ITS OWN duration/cost/usage. SUM across them for the run total;
+            # overwriting (the old bug) kept only the last sub-call, giving a wildly wrong
+            # figure (e.g. 2h of work reported as ~2 min, or tokens off by 20x).
             $State.sawResult = $true
             $State.isError = [bool](Get-JsonProp $evt 'is_error' $false)
-            $d = Get-JsonProp $evt 'duration_ms'; if ($null -ne $d) { $State.durationMs = [double]$d }
-            $c = Get-JsonProp $evt 'total_cost_usd'; if ($null -ne $c) { $State.costUsd = [double]$c }
+            $d = Get-JsonProp $evt 'duration_ms'
+            if ($null -eq $d) { $d = Get-JsonProp $evt 'duration_api_ms' }   # tolerate the api-only field
+            if ($null -ne $d) { $State.durationMs += [double]$d }
+            $c = Get-JsonProp $evt 'total_cost_usd'; if ($null -ne $c) { $State.costUsd += [double]$c }
             $rs = Get-JsonProp $evt 'session_id'; if ($rs) { $State.sessionId = $rs }
-            $u = Get-JsonProp $evt 'usage'
-            if ($u) {
-                $sum = 0
-                foreach ($k in @('input_tokens', 'output_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens')) { $sum += [int](Get-JsonProp $u $k 0) }
-                $State.tokens = $sum
-            }
+            $State.tokens += (Get-ClaudeUsageTokens -Event $evt)
         }
     }
 }

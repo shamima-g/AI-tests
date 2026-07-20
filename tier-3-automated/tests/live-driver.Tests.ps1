@@ -87,6 +87,24 @@ Describe 'Event parsing — Read-ClaudeEvent updates state and fires OnTurn' {
         { Read-ClaudeEvent -Line 'not json at all' -State $state -OnTurn $null } | Should -Not -Throw
         $state.turns | Should -Be 0
     }
+
+    It 'PASS: MANY result events SUM (duration, cost, tokens) — not last-write-wins' {
+        $state = @{ turns = 0; sessionId = $null; model = 'opus'; sawResult = $false; isError = $false; durationMs = 0.0; costUsd = 0.0; tokens = 0; partialTokens = 0; lastType = $null; prevGate = 'spec' }
+        # three sub-invocations, each its own cumulative usage/duration/cost
+        Read-ClaudeEvent -Line '{"type":"result","duration_ms":100000,"total_cost_usd":0.10,"usage":{"input_tokens":1000,"output_tokens":200,"cache_read_input_tokens":5000}}' -State $state -OnTurn $null
+        Read-ClaudeEvent -Line '{"type":"result","duration_ms":50000,"total_cost_usd":0.05,"usage":{"input_tokens":500,"output_tokens":100,"cache_read_input_tokens":2000}}' -State $state -OnTurn $null
+        Read-ClaudeEvent -Line '{"type":"result","duration_ms":20000,"total_cost_usd":0.02,"usage":{"input_tokens":300,"output_tokens":50}}' -State $state -OnTurn $null
+        $state.durationMs | Should -Be 170000                 # 100000+50000+20000 (not 20000)
+        [Math]::Round($state.costUsd, 2) | Should -Be 0.17    # 0.10+0.05+0.02
+        $state.tokens     | Should -Be 9150                   # (1000+200+5000)+(500+100+2000)+(300+50)
+    }
+
+    It 'PASS: result token capture tolerates the modelUsage format (no usage object)' {
+        $state = @{ turns = 0; sessionId = $null; model = 'opus'; sawResult = $false; isError = $false; durationMs = 0.0; costUsd = 0.0; tokens = 0; partialTokens = 0; lastType = $null; prevGate = 'spec' }
+        Read-ClaudeEvent -Line '{"type":"result","duration_api_ms":30000,"modelUsage":{"claude-opus":{"input_tokens":400,"output_tokens":100},"claude-haiku":{"input_tokens":50,"output_tokens":10}}}' -State $state -OnTurn $null
+        $state.durationMs | Should -Be 30000                  # duration_api_ms fallback
+        $state.tokens     | Should -Be 560                    # 400+100+50+10 across both models
+    }
 }
 
 Describe 'Per-phase Claude-time distribution' {

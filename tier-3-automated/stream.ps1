@@ -63,13 +63,15 @@ function ConvertFrom-ClaudeStream {
             $totalTokens += ($inTok + $outTok)
         }
         elseif ($type -eq 'result') {
+            # A run emits MANY result events (one per Claude sub-invocation), each with its
+            # own duration/turns — SUM them for the run total; overwriting would keep only
+            # the last sub-call. (Tokens stay the per-turn tally above, authoritative here;
+            # result usage is only a cross-check.)
             $ms = Get-JsonProp $evt 'duration_ms'
-            if ($null -ne $ms) { $claudeSeconds = [double]$ms / 1000.0 }
+            if ($null -eq $ms) { $ms = Get-JsonProp $evt 'duration_api_ms' }   # tolerate the api-only field
+            if ($null -ne $ms) { $claudeSeconds += [double]$ms / 1000.0 }
             $nt = Get-JsonProp $evt 'num_turns'
-            if ($null -ne $nt) { $numTurns = [int]$nt }
-            $ru = Get-JsonProp $evt 'usage'
-            $rt = Get-JsonProp $ru 'output_tokens'
-            # (result usage is a cross-check; per-turn tally above is authoritative here)
+            if ($null -ne $nt) { $numTurns += [int]$nt }
         }
     }
 
