@@ -73,6 +73,13 @@ both and compare the two reports:
 ./Run-QATests.ps1 -IncludeTier3 -Benchmark transactions -Target dev     -Ref v1.1.0
 ```
 
+Then diff the two runs automatically (result, times, tokens, pass-rate, rules missed,
+peak memory):
+
+```powershell
+./Compare-Tier3-Reports.ps1 -Benchmark transactions -A release -ARef v1.1.0 -B dev -BRef v1.1.0
+```
+
 (This is the live-build counterpart to `test:target`; for a static template-shape diff
 without building, use `compare:targets` above.)
 

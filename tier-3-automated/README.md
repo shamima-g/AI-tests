@@ -67,6 +67,17 @@ once per target and read the two report folders side by side:
 # → TestResults/transactions@release-v1.1.0/  vs  TestResults/transactions@dev-v1.1.0/
 ```
 
+Then diff the two automatically — result, times, tokens, pass-rate, rules missed, and
+peak memory, with the delta for each:
+
+```powershell
+./Compare-Tier3-Reports.ps1 -Benchmark transactions -A release -ARef v1.1.0 -B dev -BRef v1.1.0
+# → TestResults/compare-tier3-transactions@release-v1.1.0--vs--transactions@dev-v1.1.0.md
+```
+
+It reads the latest run from each side's history (pass `-Model` to compare like-for-like)
+and writes a markdown table — read-only, no build, no AI.
+
 ---
 
 ## Handy options
