@@ -115,6 +115,9 @@ function New-Tier3Report {
     & $add "| Result | $resultIcon |"
     & $add "| App (benchmark) | $($Run.benchmark) |"
     & $add "| AI model | $($Run.model) |"
+    if ($Run.ContainsKey('templateTarget') -and $Run.templateTarget) {
+        & $add "| Template | $($Run.templateTarget) |"
+    }
     & $add "| Version tested | $($Run.version) |"
     & $add "| Run by | $($Run.runBy) on $($Run.machine) |"
     & $add "| When | $dateHuman |"

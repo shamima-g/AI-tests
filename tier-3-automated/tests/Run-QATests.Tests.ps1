@@ -79,6 +79,85 @@ Describe 'Replay mode — full pipeline, no live AI' {
     }
 }
 
+Describe 'Target label slug' {
+    It 'PASS: null with no target; formats target-ref; defaults a missing ref to "default"' {
+        Get-Tier3TargetLabel -Target ''       -Ref ''        | Should -BeNullOrEmpty
+        Get-Tier3TargetLabel -Target 'release' -Ref 'v1.1.0' | Should -Be 'release-v1.1.0'
+        Get-Tier3TargetLabel -Target 'dev'                    | Should -Be 'dev-default'
+    }
+}
+
+Describe 'Resolve-Tier3Template' {
+    It 'PASS: no target returns the parent (local) template and a null label — the default' {
+        $qa = New-Sandbox
+        $res = Resolve-Tier3Template -QaRoot $qa
+        $res.label | Should -BeNullOrEmpty
+        $res.root  | Should -Be (Resolve-Path (Join-Path $qa '..')).Path
+        Remove-Item $qa -Recurse -Force
+    }
+
+    It 'PASS: a target clones the channel@ref (repo from targets.json) and returns its checkout' {
+        $qa = New-Sandbox
+        Set-Content -Path (Join-Path $qa 'targets.json') -Encoding utf8 -Value '{"targets":{"dev":{"repo":"https://example.test/dev"},"release":{"repo":"https://example.test/rel"}}}'
+        $seen = @{}
+        $cloner = { param($repo, $ref, $dest) $seen.repo = $repo; $seen.ref = $ref; $seen.dest = $dest; New-Item -ItemType Directory -Path $dest -Force | Out-Null }
+        $res = Resolve-Tier3Template -Target 'release' -Ref 'v1.1.0' -QaRoot $qa -Cloner $cloner
+        $res.label   | Should -Be 'release-v1.1.0'
+        $seen.repo   | Should -Be 'https://example.test/rel'
+        $seen.ref    | Should -Be 'v1.1.0'
+        $res.root    | Should -Match 'release-v1\.1\.0$'
+        Remove-Item $qa -Recurse -Force
+    }
+
+    It 'FAIL-guard: an unknown target throws and lists the known ones' {
+        $qa = New-Sandbox
+        Set-Content -Path (Join-Path $qa 'targets.json') -Encoding utf8 -Value '{"targets":{"dev":{"repo":"r1"},"release":{"repo":"r2"}}}'
+        { Resolve-Tier3Template -Target 'nope' -QaRoot $qa -Cloner { param($a,$b,$c) } } |
+            Should -Throw -ExpectedMessage '*Unknown target*release*'
+        Remove-Item $qa -Recurse -Force
+    }
+
+    It 'FAIL-guard: a missing targets.json is a clear error, not a crash' {
+        $qa = New-Sandbox
+        { Resolve-Tier3Template -Target 'dev' -QaRoot $qa } | Should -Throw -ExpectedMessage '*targets.json*'
+        Remove-Item $qa -Recurse -Force
+    }
+}
+
+Describe 'Targeted run — dev/release @ ref (kept separate)' {
+    It 'PASS: -Target files results under <benchmark>@<target>-<ref> and records the template' {
+        $sb = New-Sandbox
+        $sample = Join-Path $sb 'sample-run.json'; Write-SampleResult -Path $sample
+        $results = Join-Path $sb 'TestResults'
+        Invoke-RunQATests -IncludeTier3 $false -Tier3Model 'opus' -Benchmark 'transactions' `
+            -Target 'release' -Ref 'v1.1.0' `
+            -KeepDeps $false -NoTeardown $true -Cleanup $false -SkipSetup $true `
+            -ReplayResult $sample -Timestamp 'TS1' -TestResultsRoot $results | Out-Null
+        $key = 'transactions@release-v1.1.0'
+        Test-Path (Join-Path $results "$key\opus\TS1\report-0.1.0-TS1.md") | Should -BeTrue
+        Test-Path (Join-Path $results "$key\tier3-history.jsonl")          | Should -BeTrue
+        (Get-Content (Join-Path $results "$key\tier3-history.jsonl") -Raw) | Should -Match 'release-v1.1.0'
+        @(Select-String -Path (Join-Path $results "$key\opus\TS1\report-0.1.0-TS1.md") -Pattern 'Template' -SimpleMatch).Count | Should -BeGreaterThan 0
+        Remove-Item $sb -Recurse -Force
+    }
+
+    It 'PASS: release and dev runs land in separate histories (nothing mixed) — the compare setup' {
+        $sb = New-Sandbox
+        $sample = Join-Path $sb 'sample-run.json'; Write-SampleResult -Path $sample
+        $results = Join-Path $sb 'TestResults'
+        Invoke-RunQATests -IncludeTier3 $false -Tier3Model 'opus' -Benchmark 'transactions' `
+            -Target 'release' -Ref 'v1.1.0' -KeepDeps $false -NoTeardown $true -Cleanup $false -SkipSetup $true `
+            -ReplayResult $sample -Timestamp 'TS1' -TestResultsRoot $results | Out-Null
+        Invoke-RunQATests -IncludeTier3 $false -Tier3Model 'opus' -Benchmark 'transactions' `
+            -Target 'dev' -Ref 'v1.1.0' -KeepDeps $false -NoTeardown $true -Cleanup $false -SkipSetup $true `
+            -ReplayResult $sample -Timestamp 'TS1' -TestResultsRoot $results | Out-Null
+        Test-Path (Join-Path $results 'transactions@release-v1.1.0\tier3-history.jsonl') | Should -BeTrue
+        Test-Path (Join-Path $results 'transactions@dev-v1.1.0\tier3-history.jsonl')     | Should -BeTrue
+        @(Get-Content (Join-Path $results 'transactions@release-v1.1.0\tier3-history.jsonl')).Count | Should -Be 1
+        Remove-Item $sb -Recurse -Force
+    }
+}
+
 Describe 'Resume — find the interrupted run' {
     BeforeAll {
         function New-RunFolder {

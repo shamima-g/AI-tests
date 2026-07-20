@@ -430,7 +430,11 @@ can add one — but by default nothing is combined.
 > **Status: the automated Tier 3 is feature-complete** per this plan. 78 Pester unit tests.
 
 A script that:
-1. Works out **which benchmark set** to use (from `-Benchmark`, or the default).
+1. Works out **which benchmark set** to use (from `-Benchmark`, or the default) and
+   **which template** to build against — the local one by default, or a channel@version
+   (`-Target dev|release -Ref <tag>`, cloned from `targets.json` into `.targets/`, the
+   live-build counterpart to `test:target`). Targeted runs are filed under their own
+   `TestResults/<benchmark>@<target>-<ref>/` world so release and dev builds never mix.
 2. Sets up a fresh **working folder** for this run (its own folder — see "Where the
    built app is kept" below).
 3. Copies **that set's** documents into it as the instructions.

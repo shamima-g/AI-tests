@@ -30,6 +30,9 @@ Open PowerShell 7 in this folder and run:
 
 # Choose which example app to build:
 ./Run-QATests.ps1 -IncludeTier3 -Benchmark transactions
+
+# Build against a specific template channel + version (dev or release):
+./Run-QATests.ps1 -IncludeTier3 -Benchmark transactions -Target release -Ref v1.1.0
 ```
 
 It runs in the background — you get your machine back while it works. If the PC is
@@ -53,6 +56,17 @@ The app the AI built is left on disk **outside the test suite**, under
 `C:\temp\tier3-builds\<app>\<model>\<time>\` (overridable with `-BuildRoot`), so you
 can open and run it. A zipped snapshot is also kept in the run's results folder above.
 
+**Targeted runs stay separate.** With `-Target`, results are filed under
+`TestResults/<app>@<target>-<ref>/` — its own history and charts — so a release build and
+a dev build of the same app never mix. To compare how the app builds under each, run it
+once per target and read the two report folders side by side:
+
+```powershell
+./Run-QATests.ps1 -IncludeTier3 -Benchmark transactions -Target release -Ref v1.1.0
+./Run-QATests.ps1 -IncludeTier3 -Benchmark transactions -Target dev     -Ref v1.1.0
+# → TestResults/transactions@release-v1.1.0/  vs  TestResults/transactions@dev-v1.1.0/
+```
+
 ---
 
 ## Handy options
@@ -62,6 +76,8 @@ can open and run it. A zipped snapshot is also kept in the run's results folder 
 | `-IncludeTier3` | Turn the live AI run on (off by default). |
 | `-Tier3Model <name>` | Pick the AI model (e.g. `opus`, `sonnet`). Default: `opus`. |
 | `-Benchmark <name>` | Pick which example app to build. Default: the only one there. |
+| `-Target <name>` | Build against a template channel from `targets.json` (`dev` or `release`) instead of the local one. Clones it into `.targets/`. |
+| `-Ref <tag\|branch>` | The version to build against with `-Target` (e.g. `v1.1.0`). Default: the repo's default branch. |
 | `-BuildRoot <path>` | Where the app is built. Default: `C:\temp\tier3-builds` (outside the suite). |
 | `-KeepDeps` | Keep the app instantly runnable (don't strip `node_modules`). |
 | `-NoTeardown` | Clean up nothing — leave everything exactly as it was. |

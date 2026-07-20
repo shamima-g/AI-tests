@@ -27,6 +27,8 @@ param(
     [switch]$IncludeTier3,
     [string]$Tier3Model = 'opus',
     [string]$Benchmark = 'transactions',
+    [string]$Target,
+    [string]$Ref,
     [switch]$KeepDeps,
     [switch]$NoTeardown,
     [switch]$Cleanup,
@@ -72,6 +74,7 @@ function New-HistoryRecordFromRun {
         timestamp = $Run.timestamp; version = $Run.version; model = $Run.model
         benchmark = $Run.benchmark; result = $Run.result
     }
+    if ($Run.ContainsKey('templateTarget') -and $Run.templateTarget) { $rec.templateTarget = $Run.templateTarget }
     if ($Run.ContainsKey('timing') -and $Run.timing) {
         $rec.activeSeconds   = $Run.timing.activeSeconds
         $rec.claudeSeconds   = $Run.timing.claudeSeconds
@@ -107,9 +110,65 @@ function Find-IncompleteRun {
     return $null
 }
 
+# The results/label slug for a target@ref, or $null when building the local template.
+# e.g. ('release','v1.1.0') -> 'release-v1.1.0'; ('dev',$null) -> 'dev-default'.
+function Get-Tier3TargetLabel {
+    param([string]$Target, [string]$Ref)
+    if (-not $Target) { return $null }
+    $r = if ($Ref) { $Ref } else { 'default' }
+    return "$Target-$r"
+}
+
+# Resolve the template Tier 3 builds against.
+#   * No -Target  → the template the QA suite is nested in (../..). The default, and the
+#     original behaviour.
+#   * -Target dev|release [-Ref <tag|branch>] → clone that channel (repo URL from
+#     targets.json) into .targets/<target>-<ref>/ and build against THAT checkout — the
+#     Tier 3 counterpart to `npm run test:target`. -Ref defaults to the repo's default
+#     branch. This is what lets one run aim at dev vs release at a specific version.
+# $Cloner is injectable ({ param($repo,$ref,$dest) ... }) so tests need no network.
+function Resolve-Tier3Template {
+    [CmdletBinding()]
+    param(
+        [string]$Target,
+        [string]$Ref,
+        [Parameter(Mandatory)][string]$QaRoot,
+        [scriptblock]$Cloner
+    )
+    if (-not $Target) {
+        return @{ root = (Resolve-Path (Join-Path $QaRoot '..')).Path; label = $null; ref = $null }
+    }
+    $targetsFile = Join-Path $QaRoot 'targets.json'
+    if (-not (Test-Path $targetsFile)) { throw "No targets.json at $targetsFile — cannot resolve target '$Target'." }
+    $targets = (Get-Content $targetsFile -Raw | ConvertFrom-Json).targets
+    $known = @($targets.PSObject.Properties.Name)
+    if ($known -notcontains $Target) { throw "Unknown target '$Target'. Known targets: $($known -join ', ')." }
+    $repo  = $targets.$Target.repo
+    $label = Get-Tier3TargetLabel -Target $Target -Ref $Ref
+    $dest  = Join-Path (Join-Path $QaRoot '.targets') $label
+    if (-not $Cloner) {
+        $Cloner = {
+            param($repoUrl, $gitRef, $destPath)
+            if (Test-Path $destPath) { Remove-Item $destPath -Recurse -Force }
+            New-Item -ItemType Directory -Path (Split-Path $destPath -Parent) -Force | Out-Null
+            $cloneArgs = @('clone', '--depth', '1')
+            if ($gitRef) { $cloneArgs += @('--branch', $gitRef) }
+            $cloneArgs += @($repoUrl, $destPath)
+            & git @cloneArgs
+            if ($LASTEXITCODE -ne 0) {
+                if (Test-Path $destPath) { Remove-Item $destPath -Recurse -Force }
+                throw "git clone failed for $repoUrl @ $(if ($gitRef) { $gitRef } else { '(default branch)' }) — check the ref exists."
+            }
+        }
+    }
+    & $Cloner $repo $Ref $dest
+    return @{ root = (Resolve-Path $dest).Path; label = $label; repo = $repo; ref = $Ref }
+}
+
 function Invoke-RunQATests {
     param(
         [bool]$IncludeTier3, [string]$Tier3Model, [string]$Benchmark,
+        [string]$Target, [string]$Ref,
         [bool]$KeepDeps, [bool]$NoTeardown, [bool]$Cleanup, [bool]$SkipSetup,
         [bool]$SkipLowerTiers, [bool]$Resume, [string]$ReplayResult, [string]$Timestamp, [string]$TestResultsRoot, [string]$BuildRoot
     )
@@ -117,21 +176,28 @@ function Invoke-RunQATests {
     # The built app is a throwaway working copy — keep it OUT of the test suite, under a temp root.
     if (-not $BuildRoot) { $BuildRoot = 'C:\temp\tier3-builds' }
 
+    # When aimed at a target (dev/release @ ref), everything for this run is filed under
+    # its own "<benchmark>@<target>-<ref>" world so its history, charts, and estimates
+    # never mix with the local-template runs — the same "separated per benchmark" rule,
+    # extended to the target. Without -Target this is just "<benchmark>", as before.
+    $targetLabel = Get-Tier3TargetLabel -Target $Target -Ref $Ref
+    $resultsKey  = if ($targetLabel) { "$Benchmark@$targetLabel" } else { $Benchmark }
+
     # Resume: continue an interrupted run rather than starting a fresh one.
     $resumeSessionId = $null
     if ($Resume) {
         if (-not $Timestamp) {
-            $Timestamp = Find-IncompleteRun -TestResultsRoot $TestResultsRoot -Benchmark $Benchmark -Model $Tier3Model
-            if (-not $Timestamp) { throw "Nothing to resume: no started-but-unfinished run for $Benchmark/$Tier3Model under $TestResultsRoot." }
+            $Timestamp = Find-IncompleteRun -TestResultsRoot $TestResultsRoot -Benchmark $resultsKey -Model $Tier3Model
+            if (-not $Timestamp) { throw "Nothing to resume: no started-but-unfinished run for $resultsKey/$Tier3Model under $TestResultsRoot." }
         }
     }
     if (-not $Timestamp) { $Timestamp = (Get-Date -Format 'yyyyMMdd-HHmm') }
 
-    $benchResults = Join-Path $TestResultsRoot $Benchmark
+    $benchResults = Join-Path $TestResultsRoot $resultsKey
     $runFolder    = Join-Path (Join-Path $benchResults $Tier3Model) $Timestamp
     $historyPath  = Join-Path $benchResults 'tier3-history.jsonl'
     $htmlPath     = Join-Path $benchResults 'tier3-metrics.html'
-    $buildsDir    = Join-Path (Join-Path (Join-Path $BuildRoot $Benchmark) $Tier3Model) $Timestamp
+    $buildsDir    = Join-Path (Join-Path (Join-Path $BuildRoot $resultsKey) $Tier3Model) $Timestamp
     New-Item -ItemType Directory -Path $runFolder -Force | Out-Null
 
     if ($Resume) {
@@ -153,13 +219,18 @@ function Invoke-RunQATests {
         $run = ConvertTo-HashtableDeep (Get-Content $ReplayResult -Raw | ConvertFrom-Json)
     }
     elseif ($IncludeTier3 -or $Resume) {
-        $templateRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path        # the Stadium 8 template (repo root)
+        # Default: build against the template the suite is nested in. With -Target, clone
+        # that channel@ref and build against it instead (see Resolve-Tier3Template).
+        $qaRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+        $tmpl = Resolve-Tier3Template -Target $Target -Ref $Ref -QaRoot $qaRoot
+        $templateRoot = $tmpl.root
+        $versionLabel = if ($Target) { if ($Ref) { $Ref } else { 'default' } } else { '0.1.0' }
         $benchmarkDir = (Join-Path (Join-Path $PSScriptRoot '..' 'benchmark-files') $Benchmark)
         if (-not (Test-Path $benchmarkDir)) { throw "Benchmark '$Benchmark' not found at $benchmarkDir." }
         $liveArgs = @{
             Model = $Tier3Model; Benchmark = $Benchmark; WorkingDir = $buildsDir
             TemplateRoot = $templateRoot; BenchmarkDir = $benchmarkDir
-            LiveDir = (Join-Path $runFolder 'tier3-live'); RunId = $Timestamp; Version = '0.1.0'
+            LiveDir = (Join-Path $runFolder 'tier3-live'); RunId = $Timestamp; Version = $versionLabel
         }
         if ($resumeSessionId) { $liveArgs.ResumeSessionId = $resumeSessionId }
         $run = Invoke-Tier3LiveRun @liveArgs
@@ -170,6 +241,7 @@ function Invoke-RunQATests {
 
     # keep model/benchmark/timestamp authoritative from the invocation
     $run.model = $Tier3Model; $run.benchmark = $Benchmark; $run.timestamp = $Timestamp
+    if ($targetLabel) { $run.templateTarget = $targetLabel }   # which template channel@ref this run built against
 
     # 2b) run the cheap tiers (Tier 1 + Tier 2) so one report covers the whole suite.
     if (-not $SkipLowerTiers -and -not $ReplayResult) {
@@ -181,7 +253,7 @@ function Invoke-RunQATests {
     # 3) report + history + charts
     $reportPath = New-Tier3Report -Run $run -OutDir $runFolder -HistoryPath $historyPath
     Add-Tier3HistoryLine -HistoryPath $historyPath -Record (New-HistoryRecordFromRun -Run $run)
-    $null = New-Tier3Html -HistoryPath $historyPath -OutPath $htmlPath -Benchmark $Benchmark
+    $null = New-Tier3Html -HistoryPath $historyPath -OutPath $htmlPath -Benchmark $resultsKey
     $null = Update-Tier3Index -TestResultsRoot $TestResultsRoot   # rebuild the top-level master list
 
     # 4) zip the built app into the run folder (best-effort) BEFORE teardown strips
@@ -205,6 +277,7 @@ function Invoke-RunQATests {
 # Run unless dot-sourced (dot-sourcing exposes the functions for unit tests).
 if ($MyInvocation.InvocationName -ne '.') {
     $summary = Invoke-RunQATests -IncludeTier3:$IncludeTier3.IsPresent -Tier3Model $Tier3Model -Benchmark $Benchmark `
+        -Target $Target -Ref $Ref `
         -KeepDeps:$KeepDeps.IsPresent -NoTeardown:$NoTeardown.IsPresent -Cleanup:$Cleanup.IsPresent `
         -SkipSetup:$SkipSetup.IsPresent -SkipLowerTiers:$SkipLowerTiers.IsPresent -Resume:$Resume.IsPresent -ReplayResult $ReplayResult -Timestamp $Timestamp -TestResultsRoot $TestResultsRoot -BuildRoot $BuildRoot
     Write-Host "Report:  $($summary.report)"
