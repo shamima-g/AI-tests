@@ -86,6 +86,25 @@ and writes a markdown table — read-only, no build, no AI.
 
 ---
 
+## What the report shows
+
+Each run's `report-<version>-<time>.md` covers, in plain language: the result and verdict,
+the AI model and template/version, how long it took (**actual next to an estimate** — both
+whole-run and per phase), tokens and memory, and a plain-English fix list for anything flagged.
+
+It also breaks the work down **by epic**:
+
+- **Epics created** and **stories created** — headline counts in the run summary.
+- **Time to build each epic** — a per-epic table of **estimated vs actual** time (and the
+  difference). Actual comes from the built app's git history (first→last commit for that
+  epic); the estimate is that epic's average over past runs (a dash until there's history).
+
+The **charts page** (`tier3-metrics.html`, open in a browser) shows the same epic data as a
+**bar chart** — actual time this run vs the average across recorded runs, one bar-pair per
+epic — alongside the time-taken, most-flagged-rules, and last-10-per-model charts.
+
+---
+
 ## Handy options
 
 | Option | What it does |
