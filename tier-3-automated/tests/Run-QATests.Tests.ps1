@@ -158,6 +158,27 @@ Describe 'Targeted run — dev/release @ ref (kept separate)' {
     }
 }
 
+Describe 'Compress-Tier3Logs — shrink the raw stream log' {
+    It 'PASS: gzips each *-claude.jsonl and removes the raw file' {
+        $sb = New-Sandbox
+        $live = Join-Path $sb 'tier3-live'; New-Item -ItemType Directory -Path $live -Force | Out-Null
+        $raw = Join-Path $live 'TS1-claude.jsonl'
+        Set-Content -Path $raw -Value (1..500 | ForEach-Object { '{"type":"assistant","i":' + $_ + '}' }) -Encoding utf8
+        Set-Content -Path (Join-Path $live 'session.id') -Value 'sess-abc' -Encoding utf8   # must be left alone
+        $res = Compress-Tier3Logs -LiveDir $live
+        $res.ok | Should -BeTrue
+        Test-Path $raw          | Should -BeFalse   # raw removed
+        Test-Path "$raw.gz"     | Should -BeTrue    # gzip written
+        Test-Path (Join-Path $live 'session.id') | Should -BeTrue   # untouched
+        (Get-Item "$raw.gz").Length | Should -BeLessThan (($raw.Length) + 100000)  # sanity: a real file
+        Remove-Item $sb -Recurse -Force
+    }
+
+    It 'FAIL-guard: a missing live folder is a no-op, not an error' {
+        (Compress-Tier3Logs -LiveDir (Join-Path ([System.IO.Path]::GetTempPath()) 'no-such-live-xyz')).ok | Should -BeTrue
+    }
+}
+
 Describe 'Resume — find the interrupted run' {
     BeforeAll {
         function New-RunFolder {

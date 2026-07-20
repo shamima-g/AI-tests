@@ -56,6 +56,12 @@ The app the AI built is left on disk **outside the test suite**, under
 `C:\temp\tier3-builds\<app>\<model>\<time>\` (overridable with `-BuildRoot`), so you
 can open and run it. A zipped snapshot is also kept in the run's results folder above.
 
+**Kept lean automatically.** After each run the raw AI stream log is gzipped (~7 MB →
+~1.8 MB; use `-KeepRawLogs` to keep it raw), and the built app's `node_modules`/build
+caches are stripped and its git repo compacted (`git gc`, history preserved). For the
+smallest footprint, `-Cleanup` removes the working folder entirely — the zipped snapshot
+still survives.
+
 **Targeted runs stay separate.** With `-Target`, results are filed under
 `TestResults/<app>@<target>-<ref>/` — its own history and charts — so a release build and
 a dev build of the same app never mix. To compare how the app builds under each, run it
@@ -91,6 +97,7 @@ and writes a markdown table — read-only, no build, no AI.
 | `-Ref <tag\|branch>` | The version to build against with `-Target` (e.g. `v1.1.0`). Default: the repo's default branch. |
 | `-BuildRoot <path>` | Where the app is built. Default: `C:\temp\tier3-builds` (outside the suite). |
 | `-KeepDeps` | Keep the app instantly runnable (don't strip `node_modules`). |
+| `-KeepRawLogs` | Keep the raw AI stream log uncompressed. By default it's gzipped after the run (~7 MB → ~1.8 MB). |
 | `-NoTeardown` | Clean up nothing — leave everything exactly as it was. |
 | `-Cleanup` | Clean up the most — remove the working folder (the zip is still kept). |
 

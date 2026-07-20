@@ -8,9 +8,13 @@
   REMOVES only the heavy, rebuildable bits (node_modules, build caches, temp scratch).
 
   Switches:
-    (default)   remove node_modules + build caches under the working folder
+    (default)   remove node_modules + build caches, then compact the app's git repo
     -KeepDeps   leave node_modules in place (app stays instantly runnable)
     -Full       remove the ENTIRE working folder (the results zip still survives)
+
+  The default also runs `git gc` on the app's repo so the kept copy is smaller while its
+  full history (a commit per story) is preserved. For the smallest footprint use -Full,
+  which keeps only the zipped snapshot in TestResults.
 
   Best-effort by design: a cleanup hiccup is reported, never thrown — the caller's own
   temp handling is the real safety net. No live AI involved.
@@ -29,7 +33,7 @@ function Invoke-Tier3Teardown {
         [switch]$Full
     )
     $removed = [System.Collections.Generic.List[string]]::new()
-    $result = @{ removed = $removed; ok = $true; note = '' }
+    $result = @{ removed = $removed; ok = $true; note = ''; gitCompacted = $false }
 
     if (-not (Test-Path $WorkingDir)) {
         $result.note = "Working folder not found (nothing to do): $WorkingDir"
@@ -59,6 +63,16 @@ function Invoke-Tier3Teardown {
                         $result.note = "Some items could not be removed (locked?): $($_.Exception.Message)"
                     }
                 }
+        }
+
+        # Compact the app's git repo so the kept copy is smaller (all history preserved).
+        # Best-effort: if git is absent or the repo is busy, skip it silently.
+        if (Test-Path (Join-Path $WorkingDir '.git')) {
+            try {
+                & git -C $WorkingDir gc --aggressive --prune=now --quiet 2>$null
+                if ($LASTEXITCODE -eq 0) { $result.gitCompacted = $true }
+            }
+            catch { <# git missing or repo locked — leave .git as-is #> }
         }
     }
     catch {

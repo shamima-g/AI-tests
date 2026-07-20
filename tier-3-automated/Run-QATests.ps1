@@ -30,6 +30,7 @@ param(
     [string]$Target,
     [string]$Ref,
     [switch]$KeepDeps,
+    [switch]$KeepRawLogs,
     [switch]$NoTeardown,
     [switch]$Cleanup,
     [switch]$SkipSetup,
@@ -165,11 +166,41 @@ function Resolve-Tier3Template {
     return @{ root = (Resolve-Path $dest).Path; label = $label; repo = $repo; ref = $Ref }
 }
 
+# Gzip the bulky raw Claude stream log(s) in a run's live folder. The raw stream is the
+# single biggest artifact (~7 MB) and nothing re-reads it after the run; gzipping drops it
+# ~75% and it's still openable with any gzip tool. Best-effort: a hiccup never fails a run.
+function Compress-Tier3Logs {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$LiveDir)
+    $compressed = [System.Collections.Generic.List[string]]::new()
+    if (-not (Test-Path $LiveDir)) { return @{ ok = $true; compressed = $compressed } }
+    Add-Type -AssemblyName System.IO.Compression -ErrorAction SilentlyContinue
+    foreach ($f in (Get-ChildItem -Path $LiveDir -Filter '*-claude.jsonl' -File -ErrorAction SilentlyContinue)) {
+        try {
+            $src = $f.FullName; $dst = "$src.gz"
+            $in = [System.IO.File]::OpenRead($src)
+            try {
+                $out = [System.IO.File]::Create($dst)
+                try {
+                    $gz = New-Object System.IO.Compression.GZipStream($out, [System.IO.Compression.CompressionLevel]::Optimal)
+                    try { $in.CopyTo($gz) } finally { $gz.Dispose() }
+                }
+                finally { $out.Dispose() }
+            }
+            finally { $in.Dispose() }
+            Remove-Item -LiteralPath $src -Force -ErrorAction Stop
+            $compressed.Add($dst)
+        }
+        catch { <# best-effort per file — leave the raw log if it can't be compressed #> }
+    }
+    return @{ ok = $true; compressed = $compressed }
+}
+
 function Invoke-RunQATests {
     param(
         [bool]$IncludeTier3, [string]$Tier3Model, [string]$Benchmark,
         [string]$Target, [string]$Ref,
-        [bool]$KeepDeps, [bool]$NoTeardown, [bool]$Cleanup, [bool]$SkipSetup,
+        [bool]$KeepDeps, [bool]$KeepRawLogs, [bool]$NoTeardown, [bool]$Cleanup, [bool]$SkipSetup,
         [bool]$SkipLowerTiers, [bool]$Resume, [string]$ReplayResult, [string]$Timestamp, [string]$TestResultsRoot, [string]$BuildRoot
     )
     if (-not $TestResultsRoot) { $TestResultsRoot = (Join-Path $PSScriptRoot '..' 'TestResults') }
@@ -266,6 +297,9 @@ function Invoke-RunQATests {
         if (-not $zipRes.ok) { $zipPath = $null }   # best-effort — never fail the run
     }
 
+    # 4b) shrink the bulky raw Claude stream log (~75% smaller) unless asked to keep it raw.
+    if (-not $KeepRawLogs) { $null = Compress-Tier3Logs -LiveDir (Join-Path $runFolder 'tier3-live') }
+
     # 5) teardown (best-effort; always after the report + zip are written)
     if (-not $NoTeardown -and (Test-Path $buildsDir)) {
         Invoke-Tier3Teardown -WorkingDir $buildsDir -KeepDeps:$KeepDeps -Full:$Cleanup | Out-Null
@@ -278,7 +312,7 @@ function Invoke-RunQATests {
 if ($MyInvocation.InvocationName -ne '.') {
     $summary = Invoke-RunQATests -IncludeTier3:$IncludeTier3.IsPresent -Tier3Model $Tier3Model -Benchmark $Benchmark `
         -Target $Target -Ref $Ref `
-        -KeepDeps:$KeepDeps.IsPresent -NoTeardown:$NoTeardown.IsPresent -Cleanup:$Cleanup.IsPresent `
+        -KeepDeps:$KeepDeps.IsPresent -KeepRawLogs:$KeepRawLogs.IsPresent -NoTeardown:$NoTeardown.IsPresent -Cleanup:$Cleanup.IsPresent `
         -SkipSetup:$SkipSetup.IsPresent -SkipLowerTiers:$SkipLowerTiers.IsPresent -Resume:$Resume.IsPresent -ReplayResult $ReplayResult -Timestamp $Timestamp -TestResultsRoot $TestResultsRoot -BuildRoot $BuildRoot
     Write-Host "Report:  $($summary.report)"
     Write-Host "History: $($summary.history)"

@@ -81,4 +81,25 @@ Describe 'Teardown — keep what matters, remove the junk' {
         $res.ok | Should -BeTrue
         $res.note | Should -Match 'nothing to do'
     }
+
+    It 'PASS: compacts the app git repo (history preserved, repo still valid)' {
+        $root = New-FakeWorkingTree
+        & git -C $root init --quiet 2>$null
+        & git -C $root -c user.email=t@t -c user.name=t add -A 2>$null
+        & git -C $root -c user.email=t@t -c user.name=t commit -m 'first' --quiet 2>$null
+        $res = Invoke-Tier3Teardown -WorkingDir $root
+        $res.ok           | Should -BeTrue
+        $res.gitCompacted | Should -BeTrue
+        Test-Path (Join-Path $root '.git') | Should -BeTrue                    # history kept
+        (& git -C $root rev-parse --verify HEAD 2>$null) | Should -Not -BeNullOrEmpty  # repo still valid
+        Remove-Item $root -Recurse -Force
+    }
+
+    It 'PASS: no .git present → gitCompacted stays false, no error' {
+        $root = New-FakeWorkingTree
+        $res = Invoke-Tier3Teardown -WorkingDir $root
+        $res.ok           | Should -BeTrue
+        $res.gitCompacted | Should -BeFalse
+        Remove-Item $root -Recurse -Force
+    }
 }
