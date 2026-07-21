@@ -69,7 +69,10 @@ specific channel and version instead, add `-Target` (`dev` or `release`, from
 both and compare the two reports:
 
 ```powershell
+# release = Digiata/Stadium-Builder
 ./Run-QATests.ps1 -IncludeTier3 -Benchmark transactions -Target release -Ref v1.1.0
+
+# dev = stadium-software/stadium-8
 ./Run-QATests.ps1 -IncludeTier3 -Benchmark transactions -Target dev     -Ref v1.1.0
 ```
 
@@ -112,11 +115,6 @@ advances past its last tag — its contract needs updating so it's judged agains
 own shape, not the old baseline. Point `reconcile` at that target to see (and apply)
 what changed:
 
-```bash
-QA_TARGET=dev npm run reconcile          # update the dev contract to match a dev checkout
-QA_TARGET=release npm run reconcile      # same, for release
-npm run reconcile:check                  # report drift without writing changes
-```
 
 ## Good to know
 
