@@ -1,8 +1,10 @@
 /**
  * TG-38 — Every story file declares a non-empty Role.
  *
- * Rule: generated-docs/epics/<slug>/stories/story-*.md must carry a `**Role:**`
- * field with a real value (not blank, "N/A", "TBD", or "unknown").
+ * Rule: generated-docs/epics/<slug>/stories/story-*.md must declare a role with a
+ * real value (not blank, "N/A", "TBD", or "unknown"). The role may be given either
+ * as a bold marker (`**Role:** admin` / `**Roles:** …`) or as a metadata-table row
+ * (`| Role | admin |` / `| Roles | Importer, Approver |`), singular or plural.
  *
  * The rule is tested against fixtures; a regression scan runs it over the real
  * epic story tree when one exists, and is skipped (visibly) otherwise.
@@ -24,6 +26,21 @@ describe('TG-38 rule — extractRole / roleViolation', () => {
     const content = '# Story\n\n**Role:** All authenticated users\n';
     expect(roleViolation(content)).toBeNull();
     expect(EMPTY_ROLE_VALUES.has('all authenticated users')).toBe(false);
+  });
+
+  it('PASS: accepts a plain metadata-table row, singular or plural', () => {
+    expect(extractRole('# Story\n\n| Role | Approver |\n')).toBe('Approver');
+    expect(extractRole('# Story\n\n| Roles | Importer, Approver |\n')).toBe('Importer, Approver');
+    expect(roleViolation('# Story\n\n| Roles | Importer, Approver |\n')).toBeNull();
+  });
+
+  it('PASS: accepts the bold plural marker', () => {
+    expect(extractRole('# Story\n\n**Roles:** Importer, Approver\n')).toBe('Importer, Approver');
+    expect(roleViolation('# Story\n\n**Roles:** Importer, Approver\n')).toBeNull();
+  });
+
+  it('FAIL: flags an empty table-row role', () => {
+    expect(roleViolation('# Story\n\n| Roles |  |\n')).not.toBeNull();
   });
 
   it('FAIL: flags an empty role', () => {

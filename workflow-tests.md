@@ -190,7 +190,7 @@ the Tier-3 walkthrough:
 | **Shadcn only** | UI primitives imported from `@/components/ui/` | a hand-rolled primitive from raw HTML + Tailwind |
 | **Exact API paths** | endpoints use the description's paths, via the shared client | a guessed path (e.g. `/api/tasks` vs `/api/v2/tasks`), or a raw `fetch(` outside the client |
 | **One place for styling** | colours/fonts/spacing reference central tokens | a one-off hex colour in a screen |
-| **Every story has a role** | each story file has a non-empty `**Role:**` | a missing/empty role line |
+| **Every story has a role** | each story file has a non-empty role, given as `**Role:**`/`**Roles:**` or a `\| Role \|`/`\| Roles \|` table row | a missing/empty role line |
 | **Plain language** | user checklists carry no jargon | grep (case-insensitive) `tsc\|eslint\|gate [0-9]\|isloading\|skeleton` |
 
 ---

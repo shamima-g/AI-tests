@@ -113,9 +113,13 @@ export const isStoryFile = (name: string): boolean => /^story-.+\.md$/.test(name
 
 /** The role value from a story file, or null when no Role field is present. */
 export function extractRole(content: string): string | null {
-  // Matches `**Role:** admin` or `| **Role:** | admin |` etc.
-  const m = content.match(/\*\*Role:?\*\*\s*[:|]?\s*([^\n|]+)/i);
-  return m ? m[1].trim() : null;
+  // Accept singular or plural, bold marker or plain metadata-table row:
+  //   `**Role:** admin`, `**Roles:** admin`, `| **Role:** | admin |`
+  //   `| Role | admin |`, `| Roles | Importer, Approver |`
+  const bold = content.match(/\*\*Roles?:?\*\*\s*[:|]?\s*([^\n|]+)/i);
+  if (bold) return bold[1].trim();
+  const row = content.match(/^\s*\|\s*Roles?\s*\|\s*([^\n|]+?)\s*\|/im);
+  return row ? row[1].trim() : null;
 }
 
 /** A description of the role problem, or null when the role is valid. */
