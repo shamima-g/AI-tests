@@ -1,0 +1,52 @@
+{
+  "_comment": "Benchmark intake facts for the E-commerce Online Store planning set. Mirrors transactions/answers.json. Planning only — no build. Two answers are marked NEEDS_CONFIRMATION.",
+
+  "benchmark": "E-commerce",
+
+  "intake": {
+    "pitch": "An AdventureWorks Online Store. Customers browse a product catalogue, build a shopping cart, and check out to place orders; Admins manage the product catalogue and stock, process orders through their lifecycle, and manage customer records. Backed by the AdventureWorks 2019 SQL Server database.",
+    "roles": [
+      { "name": "Customer", "can": ["browse/search/filter catalogue", "view product detail", "manage own cart", "checkout/place order", "view own orders"], "cannot": ["manage products", "change order status", "manage other customers"] },
+      { "name": "Admin", "can": ["manage products & stock", "view all orders", "advance order status", "view/edit customers"], "cannot": ["shop (no cart/checkout)"] }
+    ],
+    "pageBudget": {
+      "storefront": ["Product Catalog", "Shopping Cart", "Checkout", "My Orders"],
+      "admin": ["Product Management", "Order Management", "Customer Management"]
+    },
+    "signIn": {
+      "choice": "your own server (BFF)",
+      "options": ["your own server (BFF)", "a hosted sign-in provider", "no sign-in / stub"],
+      "rationale": "A real auth API (POST /v1/auth/login, port 10020) issues a cookie-based JWT session validated server-side. RBAC (Customer vs Admin) is enforced by both the front-end and the backend; BFF fits the cookie-session model."
+    },
+    "dataSource": {
+      "note": "Microsoft AdventureWorks 2019 sample database on SQL Server. Reuses Production/Sales/Person/Purchasing schemas; adds an AppSecurity schema for identity/RBAC. OpenAPI specs provided (frontend/docs/auth-api.yaml, store-api.yaml). Build against mock data from the specs unless the backend is up.",
+      "database": "AdventureWorks2019",
+      "authApiBaseUrl": "http://localhost:10020",
+      "storeApiBaseUrl": "http://localhost:10015/store-api",
+      "seededUsers": ["customer@adventureworks.com / Test123 (Customer)", "admin@adventureworks.com / Test123 (Admin)"]
+    },
+    "compliance": {
+      "regulatedData": false,
+      "note": "NEEDS_CONFIRMATION — no regulated/PII compliance regime called out; payment capture is out of scope (order intent only)."
+    },
+    "styling": {
+      "source": "frontend/docs/design-system-generic-retail.md",
+      "note": "Use the provided generic-retail design system for colours/fonts/spacing. Sample product fixtures in frontend/docs/products_2026-07-22.csv."
+    }
+  },
+
+  "approvals": {
+    "intakeApproval": { "action": "approve", "note": "Approve the project facts + page plan once shown." },
+    "storyApproval":  { "action": "approve", "note": "Approve the story list once shown." },
+    "handsOnApproval": {
+      "action": "approve",
+      "perPartChecks": [
+        "Customer can add a product to the cart and place an order; stock decrements and the cart clears",
+        "Admin can advance an order's status (In process -> Approved) and it reflects in the list",
+        "Customer session is forbidden (403) from admin product/order/customer endpoints"
+      ],
+      "note": "Default trio (editable). User-observable checks ticked at MANUAL-TEST."
+    },
+    "mergeApproval": { "action": "approve", "note": "Approve the merge into main once EPIC-END is green." }
+  }
+}

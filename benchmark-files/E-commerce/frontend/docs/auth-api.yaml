@@ -1,0 +1,97 @@
+openapi: 3.0.3
+info:
+  title: Authentication
+  version: 1.0.0
+  description: >
+    Authentication API for the AdventureWorks Online Store benchmark. Issues a
+    cookie-based JWT session and resolves the caller's role (Customer | Admin)
+    and, for a Customer, the linked CustomerID.
+servers:
+  - url: http://localhost:10020
+paths:
+  /v1/health:
+    get:
+      operationId: HealthGet
+      summary: Unauthenticated health probe
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Status: { type: string, example: 'Healthy' }
+
+  /v1/auth/login:
+    post:
+      operationId: AuthLogin
+      summary: Authenticate with email + password; set session cookie
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [Email, Password]
+              properties:
+                Email: { type: string, example: 'customer@adventureworks.com' }
+                Password: { type: string, example: 'Test123' }
+      responses:
+        '200':
+          description: OK — sets HttpOnly session cookie
+          headers:
+            Set-Cookie:
+              schema: { type: string, example: 'session=<jwt>; HttpOnly; Secure; SameSite=Strict' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserInfo' }
+        '401': { description: Invalid credentials }
+        '500': { description: Internal Server Error }
+
+  /v1/auth/logout:
+    post:
+      operationId: AuthLogout
+      summary: Delete session(s) and clear the cookie
+      security:
+        - SessionCookie: []
+      responses:
+        '200': { description: OK }
+        '401': { description: Unauthorized }
+
+  /v1/auth/userinfo:
+    get:
+      operationId: AuthUserInfo
+      summary: Return the authenticated user's profile, role and CustomerID
+      security:
+        - SessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserInfo' }
+        '401': { description: Unauthorized }
+
+components:
+  securitySchemes:
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+  schemas:
+    UserInfo:
+      type: object
+      properties:
+        Id: { type: integer, example: 1 }
+        Email: { type: string, example: 'customer@adventureworks.com' }
+        FirstName: { type: string, example: 'Alex' }
+        LastName: { type: string, example: 'Customer' }
+        Role: { type: string, enum: [Customer, Admin], example: 'Customer' }
+        CustomerID:
+          type: integer
+          nullable: true
+          description: Present when Role is Customer; null for Admin
+          example: 29485

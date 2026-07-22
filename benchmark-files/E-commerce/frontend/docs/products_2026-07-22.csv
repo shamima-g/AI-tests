@@ -1,0 +1,27 @@
+ProductNumber,Name,Category,Subcategory,Color,Size,ListPrice,StandardCost,AvailableQuantity,SellStartDate,Status
+BK-R93R-62,"Road-150 Red, 62",Bikes,Road Bikes,Red,62,3578.27,2171.29,8,2011-05-31,Active
+BK-R93R-44,"Road-150 Red, 44",Bikes,Road Bikes,Red,44,3578.27,2171.29,5,2011-05-31,Active
+BK-M82S-44,"Mountain-100 Silver, 44",Bikes,Mountain Bikes,Silver,44,3399.99,1912.15,12,2011-05-31,Active
+BK-M18B-40,"Mountain-500 Black, 40",Bikes,Mountain Bikes,Black,40,539.99,294.58,34,2013-05-30,Active
+BK-T79U-46,"Touring-1000 Blue, 46",Bikes,Touring Bikes,Blue,46,2384.07,1481.94,17,2012-05-30,Active
+BK-T18U-54,"Touring-3000 Blue, 54",Bikes,Touring Bikes,Blue,54,742.35,461.44,21,2012-05-30,Active
+HL-U509-R,"Sport-100 Helmet, Red",Accessories,Helmets,Red,,34.99,13.09,120,2011-05-31,Active
+HL-U509,"Sport-100 Helmet, Black",Accessories,Helmets,Black,,34.99,13.09,95,2011-05-31,Active
+WB-H098,Water Bottle - 30 oz.,Accessories,Bottles and Cages,,,4.99,1.87,410,2013-05-30,Active
+BC-M005,Mountain Bottle Cage,Accessories,Bottles and Cages,,,9.99,3.74,288,2013-05-30,Active
+BC-R205,Road Bottle Cage,Accessories,Bottles and Cages,,,8.99,3.36,265,2013-05-30,Active
+TI-M267,LL Mountain Tire,Accessories,Tires and Tubes,,,24.99,9.35,142,2012-05-30,Active
+TI-R092,LL Road Tire,Accessories,Tires and Tubes,,,21.49,8.04,133,2012-05-30,Active
+ST-1401,All-Purpose Bike Stand,Accessories,Bike Stands,,,159.00,59.47,26,2013-05-30,Active
+PK-7130,"Hydration Pack - 70 oz.",Accessories,Hydration Packs,Silver,,54.99,20.56,48,2013-05-30,Active
+LO-C100,Cable Lock,Accessories,Locks,,,25.00,9.35,73,2012-05-30,Discontinued
+FE-6654,Front Derailleur,Components,Derailleurs,,,91.49,40.61,54,2012-05-30,Active
+RE-6654,Rear Derailleur,Components,Derailleurs,,,121.46,53.90,49,2012-05-30,Active
+HB-M918,ML Mountain Handlebars,Components,Handlebars,,,61.92,27.48,62,2012-05-30,Active
+PD-M340,ML Mountain Pedal,Components,Pedals,Silver/Black,,62.09,27.56,80,2012-05-30,Active
+SA-M198,LL Mountain Seat/Saddle,Components,Saddles,,,27.12,12.03,110,2012-05-30,Active
+GL-F110-S,"Full-Finger Gloves, S",Clothing,Gloves,Black,S,37.99,15.67,64,2012-05-30,Active
+JE-M519-M,"Long-Sleeve Logo Jersey, M",Clothing,Jerseys,Multi,M,49.99,38.49,58,2012-05-30,Active
+SO-B909-M,"Mountain Bike Socks, M",Clothing,Socks,White,M,9.50,3.40,150,2011-05-31,Active
+CA-1098,AWC Logo Cap,Clothing,Caps,Multi,,8.99,6.92,220,2011-05-31,Active
+SH-M897-S,"Half-Finger Gloves, S",Clothing,Gloves,Black,S,24.49,9.16,71,2013-05-30,Active
