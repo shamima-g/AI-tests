@@ -731,6 +731,32 @@ function Get-Tier3SegmentRecord {
 
 # ---- the live run: scaffold -> prompt -> headless claude -> checks -> run-result -------------
 
+# Best-effort: make sure Playwright's Chromium is in the (machine-global) browser cache BEFORE
+# the AI reaches its epic-end e2e gate. Without it the workflow discovers a missing browser
+# mid-run and downloads it under time pressure — and a headless session can end before that
+# download finishes, stalling the whole run at the first epic (exactly what truncated the
+# release build). Setup.ps1 also warms it, but this covers -SkipSetup and resumed runs too.
+# Idempotent (a no-op when already cached) and never throws — on failure the AI still installs
+# it itself, as before. Writes a small log next to the run for diagnosis.
+function Install-Tier3Browser {
+    [CmdletBinding()]
+    param([string]$LogPath)
+    # Pin to the version the template's app uses (see Get-Tier3PlaywrightVersion in Setup.ps1) so
+    # we warm the SAME Chromium build the app pins, not a mismatched 'latest'. Duplicated here as a
+    # fallback so the driver stays runnable standalone (e.g. under its own Pester tests).
+    $ver = if ($env:TIER3_PLAYWRIGHT_VERSION) { $env:TIER3_PLAYWRIGHT_VERSION } else { '1.59.1' }
+    try {
+        if ($IsWindows) { $out = & cmd.exe /c "npx --yes @playwright/test@$ver install chromium 2>&1" }
+        else            { $out = & npx --yes "@playwright/test@$ver" install chromium 2>&1 }
+        if ($LogPath) { Set-Content -Path $LogPath -Value (($out | Out-String).Trim()) -Encoding utf8 }
+        return ($LASTEXITCODE -eq 0)
+    }
+    catch {
+        if ($LogPath) { Set-Content -Path $LogPath -Value "playwright install failed: $($_.Exception.Message)" -Encoding utf8 }
+        return $false
+    }
+}
+
 function Invoke-Tier3LiveRun {
     [CmdletBinding()]
     param(
@@ -760,6 +786,10 @@ function Invoke-Tier3LiveRun {
     $progressPath = Join-Path $LiveDir 'progress.json'
     # Prior segments' cumulative totals (present only when resuming an earlier segment).
     $prior = if ($resuming) { Read-Tier3Progress -Path $progressPath } else { New-Tier3ProgressZero }
+
+    # Warm the Playwright browser cache before driving the AI (see Install-Tier3Browser). Done
+    # before the run timer starts so this one-off download is never charged to build time.
+    Install-Tier3Browser -LogPath (Join-Path $LiveDir 'playwright-install.log') | Out-Null
 
     $timer = New-Tier3Timer -LiveDir $LiveDir -RunId $RunId
     $timer.Start('run', 'run')    | Out-Null

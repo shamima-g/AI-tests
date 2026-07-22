@@ -34,6 +34,62 @@ Describe 'Setup — probing (never installs)' {
         @($without | Where-Object { $_.name -like 'Claude*' }).Count | Should -Be 0
     }
 
+    It 'PASS: -IncludeTier3 adds the Playwright browser prerequisite, dropped without it' {
+        $with    = Get-Tier3Prerequisites -IncludeTier3 $true
+        $without = Get-Tier3Prerequisites -IncludeTier3 $false
+        @($with    | Where-Object { $_.name -like 'Playwright*' }).Count | Should -Be 1
+        @($without | Where-Object { $_.name -like 'Playwright*' }).Count | Should -Be 0
+    }
+
+    It 'PASS: the Playwright browser prerequisite is mandatory (installable, not optional)' {
+        $pw = Get-Tier3Prerequisites -IncludeTier3 $true | Where-Object { $_.name -like 'Playwright*' }
+        $pw.installable | Should -BeTrue
+        ($pw.ContainsKey('optional') -and $pw.optional) | Should -BeFalse   # must be present to run
+    }
+
+    It 'PASS: no prerequisite is optional — every item is must-have' {
+        $prereqs = Get-Tier3Prerequisites -IncludeTier3 $true
+        @($prereqs | Where-Object { $_.ContainsKey('optional') -and $_.optional }).Count | Should -Be 0
+    }
+
+    It 'FAIL-guard: a prerequisite that fails to install blocks the run (ok=$false)' {
+        # A stubbed install that throws — Invoke-Tier3Setup must record it as blocking, not skip it.
+        function Get-Tier3Prerequisites { param([bool]$IncludeTier3 = $true)
+            ,@(@{ name = 'FakeTool'; present = $false; installable = $true; hint = 'x'; install = { throw 'boom' }; verify = { $false } }) }
+        try {
+            $r = Invoke-Tier3Setup -IncludeTier3 $true
+            $r.ok                | Should -BeFalse
+            $r.blocking          | Should -Contain 'FakeTool'
+            ($r.log -join "`n")  | Should -Match '\[error\] FakeTool'
+        }
+        finally { Remove-Item Function:\Get-Tier3Prerequisites -ErrorAction SilentlyContinue }
+    }
+
+    It 'FAIL-guard: a prerequisite that installs but still is not detected blocks the run' {
+        # Install succeeds (no throw) but re-verify says it's still absent — must block, never proceed.
+        function Get-Tier3Prerequisites { param([bool]$IncludeTier3 = $true)
+            ,@(@{ name = 'FakeTool'; present = $false; installable = $true; hint = 'x'; install = { }; verify = { $false } }) }
+        try {
+            $r = Invoke-Tier3Setup -IncludeTier3 $true
+            $r.ok                | Should -BeFalse
+            $r.blocking          | Should -Contain 'FakeTool'
+            ($r.log -join "`n")  | Should -Match 'still not detected'
+        }
+        finally { Remove-Item Function:\Get-Tier3Prerequisites -ErrorAction SilentlyContinue }
+    }
+
+    It 'PASS: a prerequisite that installs and re-verifies is not blocking' {
+        function Get-Tier3Prerequisites { param([bool]$IncludeTier3 = $true)
+            ,@(@{ name = 'FakeTool'; present = $false; installable = $true; hint = 'x'; install = { }; verify = { $true } }) }
+        try {
+            $r = Invoke-Tier3Setup -IncludeTier3 $true
+            $r.ok                | Should -BeTrue
+            @($r.blocking).Count | Should -Be 0
+            ($r.log -join "`n")  | Should -Match 'installed and verified'
+        }
+        finally { Remove-Item Function:\Get-Tier3Prerequisites -ErrorAction SilentlyContinue }
+    }
+
     It 'PASS: -CheckOnly reports without installing and never throws' {
         $r = Invoke-Tier3Setup -IncludeTier3 $false -CheckOnly
         $r.prerequisites.Count | Should -BeGreaterThan 0

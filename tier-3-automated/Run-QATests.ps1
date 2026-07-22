@@ -240,11 +240,13 @@ function Invoke-RunQATests {
         $resumeSessionId = (Get-Content $sf -Raw).Trim()
     }
 
-    # 1) setup
+    # 1) setup — every prerequisite is mandatory. If setup couldn't make the machine fully
+    #    ready (anything missing, failed to install, or failed to verify), the tests do NOT
+    #    run: abort here with the exact list so nothing starts on a half-ready machine.
     if (-not $SkipSetup) {
         $setup = Invoke-Tier3Setup -IncludeTier3 $IncludeTier3 -LogPath (Join-Path $runFolder 'setup.log')
-        if (-not $setup.ok -and $IncludeTier3) {
-            throw "Setup can't continue — missing: $($setup.blocking -join ', '). See $($runFolder)\setup.log."
+        if (-not $setup.ok) {
+            throw "Setup can't continue — these prerequisites are missing or not working: $($setup.blocking -join ', '). Tests will not run until every prerequisite is present. See $($runFolder)\setup.log."
         }
     }
 

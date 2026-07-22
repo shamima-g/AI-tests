@@ -134,9 +134,10 @@ the end, and both cover **all three tiers**, not just Tier 3. The master runner
 ### Setup — install everything needed before any tier starts
 
 Before a single test runs, setup makes sure the machine has everything the tiers need.
-It **checks what's already there and only installs what's missing** (so it's safe to
-run every time), and it writes a short setup log into the results so you can see what
-it did. The prerequisites it covers:
+**Every prerequisite is mandatory — there are no optional items.** Setup **checks
+what's already there and only installs what's missing** (so it's safe to run every
+time), then **re-verifies each install actually landed**, and writes a short setup log
+into the results so you can see what it did. The prerequisites it covers:
 
 | Prerequisite | Needed for | How setup handles it |
 |---|---|---|
@@ -144,19 +145,22 @@ it did. The prerequisites it covers:
 | **AI-tests dependencies** | All tiers (the test tools) | `npm install` inside `AI-tests/` if not already installed |
 | **web/ dependencies** | Building and checking the app | `npm install` inside `web/` when a build is needed |
 | **PowerShell 7** | The runner and the PowerShell hook tests | Check it's present; guide install if not |
-| **Pester 5** | Tier 1 PowerShell hook tests | Install the module if missing |
-| **Playwright browsers** | The click-through (end-to-end) tests | `npx playwright install` if the browsers aren't there |
+| **Pester 5** | Tier 1 PowerShell hook tests | Install the module if missing, then confirm it loads |
+| **Playwright browser (Chromium)** | The click-through (end-to-end) gate | Install the pinned browser (`npx playwright install chromium`) if it isn't cached, then confirm the cache; **the run does not start unless it's present** |
 | **Claude command-line tool** | Tier 3 live runs | Check it's installed **and** signed in; if not, stop with a clear message (we never store logins) |
 | **Git** | Tier 2 and the build's history | Check it's present |
 
-**The guiding rule: setup installs anything required to run the tests in the suite.**
-The table above is the current list, but the principle is what matters — if a test
-needs a tool, setup is responsible for making sure it's there. So the rules setup
-follows are: **only install what's missing**; **never silently work around a missing
-must-have** — if something essential can't be installed automatically, it stops and
-tells you exactly what to do in plain English; and it records everything it checked or
-installed. If you're only running the cheap tiers, it skips the Tier-3-only
-prerequisites (like the Claude tool).
+**The guiding rule: setup installs anything required to run the tests in the suite, and
+every item is a must-have.** The table above is the current list, but the principle is
+what matters — if a test needs a tool, setup is responsible for making sure it's there
+**and working**. So the rules setup follows are: **only install what's missing**;
+**re-verify every install** so an install that "ran" but didn't actually land is caught;
+and **never silently work around, warn-and-skip, or start on a missing prerequisite** —
+if any essential item can't be installed and verified automatically, setup stops, tells
+you exactly what to do in plain English, records everything it checked or installed, and
+**the tests do not run**. If you're only running the cheap tiers, it skips the
+Tier-3-only prerequisites (the Claude tool and the Playwright browser) — but everything
+that *does* apply is still mandatory.
 
 ### Teardown — clean up across all tiers at the end
 
