@@ -19,6 +19,7 @@ Every automated Tier 3 run, newest first, grouped by app. This page is rebuilt a
 
 | When | Model | Result | Verdict | Active | Claude | Peak RAM | Tokens | Report |
 |---|---|:--:|---|--:|--:|--:|--:|---|
+| 20260723-0241 | opus | ✅ | pass | 99m 57s | 50m 35s | 10.6 GB | 39,224,737 | [open](transactions@release-v1.1.0/opus/20260723-0241/report-v1.1.0-20260723-0241.md) |
 | 20260721-0227 | opus | ✅ | recorded-fail | 117m 47s | 116m 46s | 8.2 GB | 6,153,813 | [open](transactions@release-v1.1.0/opus/20260721-0227/report-v1.1.0-20260721-0227.md) |
 | 20260720-0620 | opus | ✅ | recorded-fail | 91m 19s | 91m 19s | 7.9 GB | 74,437 | [open](transactions@release-v1.1.0/opus/20260720-0620/report-v1.1.0-20260720-0620.md) |
 
