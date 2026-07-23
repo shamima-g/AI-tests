@@ -759,6 +759,10 @@ function Install-Tier3Browser {
     # fallback so the driver stays runnable standalone (e.g. under its own Pester tests).
     $ver = if ($env:TIER3_PLAYWRIGHT_VERSION) { $env:TIER3_PLAYWRIGHT_VERSION } else { '1.59.1' }
     try {
+        # Drop a stale __dirlock/orphan zip first (a killed install leaves one behind and it blocks
+        # every later install). Uses Setup.ps1's helper when it's loaded at runtime; a no-op in
+        # standalone tests where Setup isn't dot-sourced.
+        if (Get-Command Clear-PlaywrightInstallLock -ErrorAction SilentlyContinue) { Clear-PlaywrightInstallLock }
         if ($IsWindows) { $out = & cmd.exe /c "npx --yes @playwright/test@$ver install chromium 2>&1" }
         else            { $out = & npx --yes "@playwright/test@$ver" install chromium 2>&1 }
         if ($LogPath) { Set-Content -Path $LogPath -Value (($out | Out-String).Trim()) -Encoding utf8 }

@@ -20,6 +20,47 @@ BeforeAll {
     }
 }
 
+Describe 'Playwright browser detection + lock clearing (hardened)' {
+    BeforeEach {
+        $script:cache = Join-Path ([System.IO.Path]::GetTempPath()) ("pw-cache-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $script:cache -Force | Out-Null
+        $script:prevPath = $env:PLAYWRIGHT_BROWSERS_PATH
+        $env:PLAYWRIGHT_BROWSERS_PATH = $script:cache
+    }
+    AfterEach {
+        $env:PLAYWRIGHT_BROWSERS_PATH = $script:prevPath
+        Remove-Item $script:cache -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'FAIL-guard: a chromium-* FOLDER with no executable is NOT detected as present' {
+        # The exact state that let a browserless machine pass the old check and stall at epic 1.
+        New-Item -ItemType Directory -Path (Join-Path $script:cache 'chromium-1217') -Force | Out-Null
+        Test-PlaywrightChromium      | Should -BeFalse
+        Get-PlaywrightChromiumExe    | Should -BeNullOrEmpty
+    }
+
+    It 'PASS: a chromium-* build WITH the executable is detected' {
+        $exe = Join-Path (Join-Path $script:cache 'chromium-1217') (Get-PlaywrightChromiumExeRelativePath)
+        New-Item -ItemType Directory -Path (Split-Path $exe -Parent) -Force | Out-Null
+        Set-Content -Path $exe -Value 'binary' -Encoding utf8
+        Test-PlaywrightChromium    | Should -BeTrue
+        (Get-PlaywrightChromiumExe) | Should -Be $exe
+    }
+
+    It 'PASS: Clear-PlaywrightInstallLock removes a stale __dirlock and orphan zips' {
+        New-Item -ItemType Directory -Path (Join-Path $script:cache '__dirlock') -Force | Out-Null
+        Set-Content -Path (Join-Path $script:cache 'chromium.zip') -Value 'x' -Encoding utf8
+        Set-Content -Path (Join-Path $script:cache 'chromium-headless-shell.zip') -Value 'x' -Encoding utf8
+        Clear-PlaywrightInstallLock
+        Test-Path (Join-Path $script:cache '__dirlock')            | Should -BeFalse
+        @(Get-ChildItem -LiteralPath $script:cache -Filter '*.zip').Count | Should -Be 0
+    }
+
+    It 'PASS: Clear-PlaywrightInstallLock is a safe no-op when there is nothing to clear' {
+        { Clear-PlaywrightInstallLock } | Should -Not -Throw
+    }
+}
+
 Describe 'Setup — probing (never installs)' {
     It 'PASS: reports Node and PowerShell as present in this environment' {
         $prereqs = Get-Tier3Prerequisites -IncludeTier3 $true

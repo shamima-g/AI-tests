@@ -46,11 +46,61 @@ function Get-PlaywrightCacheDir {
     else              { return (Join-Path $HOME '.cache/ms-playwright') }
 }
 
-# True when a Chromium build is already in the Playwright cache (so we can skip the install).
-function Test-PlaywrightChromium {
+# The relative path to the Chromium executable inside a `chromium-<rev>` build dir, per OS.
+function Get-PlaywrightChromiumExeRelativePath {
+    if ($IsWindows)   { return 'chrome-win\chrome.exe' }
+    elseif ($IsMacOS) { return 'chrome-mac/Chromium.app/Contents/MacOS/Chromium' }
+    else              { return 'chrome-linux/chrome' }
+}
+
+# The actual Chromium executable in the cache (newest `chromium-<rev>` build that has one), or
+# $null. This is the ground truth: a `chromium-*` FOLDER can exist from a half-extracted or
+# lock-interrupted install with no runnable binary inside — which is exactly what let a
+# browserless machine pass the old "a folder is there" check and then stall the run at the
+# first e2e gate. We look for the binary, not the folder.
+function Get-PlaywrightChromiumExe {
     $dir = Get-PlaywrightCacheDir
-    if (-not (Test-Path $dir)) { return $false }
-    return @(Get-ChildItem -LiteralPath $dir -Directory -Filter 'chromium-*' -ErrorAction SilentlyContinue).Count -gt 0
+    if (-not (Test-Path $dir)) { return $null }
+    $rel = Get-PlaywrightChromiumExeRelativePath
+    foreach ($d in (Get-ChildItem -LiteralPath $dir -Directory -Filter 'chromium-*' -ErrorAction SilentlyContinue | Sort-Object Name -Descending)) {
+        $exe = Join-Path $d.FullName $rel
+        if (Test-Path -LiteralPath $exe -PathType Leaf) { return $exe }
+    }
+    return $null
+}
+
+# True when Chromium is really installed — the EXECUTABLE exists, not merely a folder. Used both
+# to decide whether to skip the install and (post-install) to re-verify it actually landed.
+function Test-PlaywrightChromium {
+    return [bool](Get-PlaywrightChromiumExe)
+}
+
+# Best-effort deeper check: the browser binary actually runs (`chrome --version` exits 0).
+# Returns $true/$false; never throws. An extra confidence check after install.
+function Test-PlaywrightChromiumRuns {
+    $exe = Get-PlaywrightChromiumExe
+    if (-not $exe) { return $false }
+    try {
+        $out = & $exe '--version' 2>$null
+        return ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace(($out | Out-String)))
+    }
+    catch { return $false }
+}
+
+# Remove a stale Playwright install lock (`__dirlock`) and orphan download leftovers (`*.zip`)
+# from the machine-global cache. A killed/interrupted install leaves the lock behind, and it then
+# blocks EVERY later install on the machine ("wait a few minutes … remove lock manually"). Clearing
+# it before we warm is cheap and unblocks the machine immediately. Best-effort — never throws.
+function Clear-PlaywrightInstallLock {
+    $dir = Get-PlaywrightCacheDir
+    if (-not (Test-Path $dir)) { return }
+    $lock = Join-Path $dir '__dirlock'
+    if (Test-Path -LiteralPath $lock) {
+        try { Remove-Item -LiteralPath $lock -Recurse -Force -ErrorAction Stop } catch { }
+    }
+    foreach ($z in (Get-ChildItem -LiteralPath $dir -Filter '*.zip' -File -ErrorAction SilentlyContinue)) {
+        try { Remove-Item -LiteralPath $z.FullName -Force -ErrorAction Stop } catch { }
+    }
 }
 
 # The Playwright version to warm the cache with. It MUST match the version the template's
@@ -63,15 +113,47 @@ function Get-Tier3PlaywrightVersion {
     return '1.59.1'
 }
 
-# Install Chromium (and its headless shell) into the cache, using the pinned version above.
-# Throws on non-zero exit so the caller can log it and block the run — the browser is a
-# must-have, so a failed install must stop testing, never be shrugged off.
+# Install Chromium into the cache, using the pinned version above. Hardened against the failure
+# that silently truncated release runs at epic 1:
+#   * clears a stale __dirlock + orphan zips first (Clear-PlaywrightInstallLock), so a previous
+#     killed install can't block this one;
+#   * serialises via a machine-wide mutex so our warm never races another warm on the global cache;
+#   * requires BOTH a zero exit AND the executable to actually exist afterwards — "the install
+#     command ran" is not enough. Throws on any of these so the caller blocks the run rather than
+#     starting it on a machine whose browser will fail at the first e2e gate.
 function Install-PlaywrightChromium {
     $ver = Get-Tier3PlaywrightVersion
     $cmd = "npx --yes @playwright/test@$ver install chromium"
-    if ($IsWindows) { & cmd.exe /c "$cmd" 2>&1 | Out-Null }
-    else            { & npx --yes "@playwright/test@$ver" install chromium 2>&1 | Out-Null }
-    if ($LASTEXITCODE -ne 0) { throw "``$cmd`` exited $LASTEXITCODE" }
+
+    $mutex = $null; $owned = $false
+    try { $mutex = New-Object System.Threading.Mutex($false, 'Global\Tier3PlaywrightInstall') }
+    catch { $mutex = $null }   # e.g. Global\ not permitted here — proceed without the cross-session guard
+    try {
+        if ($mutex) {
+            try { $owned = $mutex.WaitOne([TimeSpan]::FromMinutes(15)) }
+            catch [System.Threading.AbandonedMutexException] { $owned = $true }   # prior holder died; we own it now
+        }
+
+        Clear-PlaywrightInstallLock                       # drop any stale lock/zip before we start
+        if ($IsWindows) { & cmd.exe /c "$cmd" 2>&1 | Out-Null }
+        else            { & npx --yes "@playwright/test@$ver" install chromium 2>&1 | Out-Null }
+        $exit = $LASTEXITCODE
+        Clear-PlaywrightInstallLock                       # and don't leave a lock behind for the next run
+
+        if ($exit -ne 0) { throw "``$cmd`` exited $exit" }
+        if (-not (Test-PlaywrightChromium)) {
+            throw "``$cmd`` reported success but no Chromium executable is present under $(Get-PlaywrightCacheDir)"
+        }
+        if (-not (Test-PlaywrightChromiumRuns)) {
+            Write-Verbose 'Playwright Chromium installed but `--version` did not confirm a launch; proceeding on executable presence.'
+        }
+    }
+    finally {
+        if ($mutex) {
+            if ($owned) { try { $mutex.ReleaseMutex() } catch { } }
+            $mutex.Dispose()
+        }
+    }
 }
 
 # Probe every prerequisite and report its status. Pure — never installs anything.
